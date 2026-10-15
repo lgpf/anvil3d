@@ -11,7 +11,7 @@ app.on('browser-window-created', (_, w) => {
     const ev = (type, x, y, b) => w.webContents.sendInputEvent({ type, x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1, ...(b ? { modifiers: ['leftButtonDown'] } : {}) });
     const tela = v => js(`(()=>{const F=window.__anvil; const p=new F.THREE.Vector3(${v}).project(F.camera); const r=document.querySelector('#vista canvas').getBoundingClientRect(); return [r.left+(p.x+1)/2*r.width, r.top+(1-p.y)/2*r.height];})()`);
     const est = () => js(`(()=>{const o=window.__anvil.estado.doc.objetos[1]; return 'pos '+o.transformacao.posicao.map(v=>v.toFixed(1)).join(',')+' giro '+o.juncao.giro;})()`);
-    await espera(2500);
+    for (let i = 0; i < 80 && !(await js(`document.querySelectorAll('.forma').length`)); i++) await espera(250);
     await js(`window.__anvil.moverPeca(false)`);
     await js(`localStorage.setItem('teste:origem','1'); localStorage.setItem('passoGiro','0')`);
     try {

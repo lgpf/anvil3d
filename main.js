@@ -83,7 +83,7 @@ function criarJanela() {
     if (fecharForcado || !estado.sujo) return;
     e.preventDefault();
     const r = dialog.showMessageBoxSync(janela, {
-      type: 'question', buttons: [txt().salvar, txt().naoSalvar, txt().cancelar], defaultId: 0, cancelId: 2,
+      type: 'question', buttons: [txt().salvar, txt().naoSalvar, txt().cancelar], defaultId: 0, cancelId: 2, noLink: true,
       message: txt().pergunta(estado.titulo),
     });
     if (r === 0) janela.webContents.send('app:salvarEFechar');
@@ -269,6 +269,11 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('app:arquivoInicial', () => arquivoInicial(process.argv));
   ipcMain.handle('app:versao', () => require('./package.json').version);
+  // a mesma pergunta de "salvar as alterações?" do fechar a janela, para Novo/Abrir (3 opções)
+  ipcMain.handle('app:perguntarSalvar', e => dialog.showMessageBoxSync(BrowserWindow.fromWebContents(e.sender), {
+    type: 'question', buttons: [txt().salvar, txt().naoSalvar, txt().cancelar], defaultId: 0, cancelId: 2, noLink: true,
+    message: txt().pergunta(estado.titulo),
+  }));
   ipcMain.on('app:estado', (_, s) => {
     estado = s;
     janela?.setTitle(`${s.sujo ? '● ' : ''}${s.titulo} — Anvil3D`);

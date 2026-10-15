@@ -19,8 +19,12 @@ app.on('browser-window-created', (_, w) => { w.webContents.on('console-message',
   const alvo = await js(`(()=>{const F=window.__anvil; const c=F.estado.doc.objetos[0]; const m=F.malhas.get(c.id); m.updateMatrixWorld(true); const b=new F.THREE.Box3().setFromObject(m,true); const p=new F.THREE.Vector3((b.min.x+b.max.x)/2, (b.min.y+b.max.y)/2, b.max.z+5); const rc=new F.THREE.Raycaster(p,new F.THREE.Vector3(0,0,-1)); const h=rc.intersectObject(m,false)[0]; const q=h.point.clone().project(F.camera); const r=document.querySelector('#vista canvas').getBoundingClientRect(); return [Math.round(r.left+(q.x+1)/2*r.width), Math.round(r.top+(1-q.y)/2*r.height)];})()`);
   w.webContents.sendInputEvent({ type: 'mouseMove', x: alvo[0], y: alvo[1] }); await espera(80);
   for (const t of ['mouseDown', 'mouseUp']) w.webContents.sendInputEvent({ type: t, x: alvo[0], y: alvo[1], button: 'left', clickCount: 1 });
-  await espera(2500);
-  console.log(await js(`document.querySelector('#msg').textContent`));
+  await espera(1500);
+  console.log('alças durante a prévia:', await js(`window.__anvil.estado.sel.length`), '| prévia:', await js(`window.__anvil.previaAF`), '| painel:', await js(`document.querySelector('#propriedades h2').textContent`), '| doc ainda tem o texto original?', await js(`window.__anvil.estado.doc.objetos.some(o=>o.nome==='Texto')`));
+  await js(`(()=>{const r=[...document.querySelectorAll('#propriedades input[type=range]')][0]; r.value='90'; r.dispatchEvent(new Event('input'));})()`); await espera(1200);
+  console.log('girou 90° na prévia:', await js(`window.__anvil.previaAF`));
+  await js(`[...document.querySelectorAll('#propriedades button')].find(b=>b.textContent==='Aplicar').click()`); await espera(2500);
+  console.log(await js(`document.querySelector('#msg').textContent`), '| prévia depois:', await js(`window.__anvil.previaAF`));
   console.log('resultado:', await js(`(()=>{const F=window.__anvil,o=F.estado.doc.objetos.find(o=>o.nome.includes('superfície')); if(!o) return 'nenhum'; const m=F.malhas.get(o.id); m.updateMatrixWorld(true); const b=new F.THREE.Box3().setFromObject(m,true); return o.nome+' | caixa '+b.min.toArray().map(v=>v.toFixed(1)).join(',')+' → '+b.max.toArray().map(v=>v.toFixed(1)).join(',');})()`));
   await js(`window.__anvil.selecionar([])`); await js(`document.querySelector('[data-cmd=ajustar]').click()`); await espera(500);
   fs.writeFileSync('/tmp/shots/96-face.png', (await w.webContents.capturePage()).toPNG());

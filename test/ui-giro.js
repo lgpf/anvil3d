@@ -9,7 +9,7 @@ app.on('browser-window-created', (_, w) => {
     const js = c => w.webContents.executeJavaScript(c);
     const caixa = i => js(`(()=>{const F=window.__anvil; const m=F.malhas.get(F.estado.doc.objetos[${i}].id); m.updateMatrixWorld(true); const b=new F.THREE.Box3().setFromObject(m,true); return 'centro '+b.getCenter(new F.THREE.Vector3()).toArray().map(v=>v.toFixed(1)).join(',')+' | min z '+b.min.z.toFixed(1);})()`);
     const girarGizmo = (eixo, graus) => js(`(()=>{const F=window.__anvil, g=F.gizmo, o=g.object; g.dispatchEvent({type:'mouseDown'}); o.rotateOnWorldAxis(new F.THREE.Vector3(${eixo}), ${graus}*Math.PI/180); o.updateMatrixWorld(true); g.dispatchEvent({type:'objectChange'}); g.dispatchEvent({type:'mouseUp'});})()`);
-    await espera(2500);
+    for (let i = 0; i < 80 && !(await js(`document.querySelectorAll('.forma').length`)); i++) await espera(250);
     await js(`window.__anvil.moverPeca(false)`);
     await js(`localStorage.setItem('teste:origem','1'); localStorage.setItem('pivo','centro')`);
     try {

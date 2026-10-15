@@ -1,9 +1,9 @@
 // Junta esférica — parte fêmea: copo com cavidade esférica, boca mais estreita que a bola (trava) e
 // cortes que deixam as paredes flexionar para a bola entrar com pressão.
 export default {
-  api: 1, id: 'junta-soquete', nome: 'Junta: soquete', categoria: 'Encaixes', icone: '◒', cor: '#7b2cbf', versao: '1.0.0',
+  api: 1, id: 'junta-soquete', nome: 'Soquete (tamanho livre)', categoria: 'Conectores', ordem: 8, icone: '◒', cor: '#7b2cbf', versao: '1.1.0',
   descricao: 'Soquete de pressão para a bola de junta esférica',
-  en: { nome: 'Joint: socket', categoria: 'Joints', descricao: 'Snap-fit socket for the ball joint',
+  en: { nome: 'Socket (any size)', categoria: 'Connectors', descricao: 'Snap-fit socket for the ball joint',
     rotulos: { bola: 'Ball diameter', folga: 'Clearance', parede: 'Wall', trava: 'Grip (how much the mouth closes, %)', cortes: 'Flex slots', base: 'Base height' } },
   parametros: [
     { chave: 'bola', rotulo: 'Diâmetro da bola', padrao: 10, min: 1 },

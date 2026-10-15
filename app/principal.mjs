@@ -30,7 +30,8 @@ const anvil = window.anvil;
 const E = {
   doc: novoDocumento(), caminho: null, sujo: false,
   sel: [],                 // ids selecionados (primeiro nível)
-  pivo: localStorage.getItem('pivo') || 'centro',
+  // o ponto escolhido não é guardado entre sessões; sem ele o giro ia para a origem da mesa (0,0,0)
+  pivo: 'centro', // cada seleção começa girando pelo centro (veja pivoDaSelecao)
   pontoPivo: [0, 0, 0],
   escolhendoPonto: false,
   eixoGiro: 'z', anguloGiro: Number(localStorage.getItem('anguloGiro') ?? 90),
@@ -101,9 +102,30 @@ const luz2 = new THREE.DirectionalLight(0xffffff, 0.5); luz2.position.set(-150, 
 // como numa impressora 3D; o STL sai nessas mesmas coordenadas
 const plano = new THREE.Group();
 cena.add(plano);
-let ladoMesa = Number(localStorage.getItem('mesa') || 200);
+// mesa retangular (X × Y, até 1000 × 1000); "ladoMesa" é o lado maior (usado para escalas de câmera)
+let mesaX = Number(localStorage.getItem('mesaX') || localStorage.getItem('mesa') || 200);
+let mesaY = Number(localStorage.getItem('mesaY') || localStorage.getItem('mesa') || 200);
+let ladoMesa = Math.max(mesaX, mesaY);
+// mesa redonda (impressoras delta): círculo de diâmetro mesaX, com o centro em (mesaX/2, mesaY/2) — a origem
+// continua na quina da frente à esquerda do quadrado que envolve o círculo
+let mesaRedonda = localStorage.getItem('mesaForma') === 'redonda';
+// grade da mesa: linha fina a cada "passoGrade" mm (1, 2,5, 5 ou 10) e linha forte a cada 10 mm (50 mm se a fina for 10)
+let passoGrade = Number(localStorage.getItem('grade') || 1);
 function ladoMesaAtual() { return ladoMesa; }
-const centroMesa = () => [ladoMesa / 2, ladoMesa / 2, 0];
+const centroMesa = () => [mesaX / 2, mesaY / 2, 0];
+function linhasGrade(LX, LY, passo, cor, z) {
+  const pts = [], nX = Math.round(LX / passo), nY = Math.round(LY / passo);
+  if (mesaRedonda) { // linhas cortadas no círculo
+    const R = LX / 2, c = R;
+    for (let i = 0; i <= nX; i++) { const x = Math.min(LX, i * passo), h = Math.sqrt(Math.max(0, R * R - (x - c) ** 2)); if (h > 0) pts.push(x, c - h, z, x, c + h, z); }
+    for (let j = 0; j <= nY; j++) { const y = Math.min(LY, j * passo), h = Math.sqrt(Math.max(0, R * R - (y - c) ** 2)); if (h > 0) pts.push(c - h, y, z, c + h, y, z); }
+  } else {
+    for (let i = 0; i <= nX; i++) { const x = Math.min(LX, i * passo); pts.push(x, 0, z, x, LY, z); }
+    for (let j = 0; j <= nY; j++) { const y = Math.min(LY, j * passo); pts.push(0, y, z, LX, y, z); }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: cor }));
+}
 // Marca fora da mesa, logo abaixo da borda da frente, à direita: "Anvil3D" + ícone nos tons da mesa
 let texMarca = null;
 const MARCA_PROP = 1024 / 220;
@@ -130,26 +152,56 @@ function texturaMarca() {
 function montarMesa() {
   plano.userData.porBaixo = null;
   for (const o of [...plano.children]) { plano.remove(o); o.traverse(x => { x.geometry?.dispose(); }); }
-  const L = ladoMesa, c = L / 2;
-  const chao = new THREE.Mesh(new THREE.PlaneGeometry(L, L), new THREE.MeshBasicMaterial({ color: 0xcfe0ea, transparent: true, opacity: 0.55, depthWrite: false }));
-  chao.position.set(c, c, -0.02); plano.add(chao);
-  const g1 = new THREE.GridHelper(L, Math.round(L), 0xb3c7d3, 0xc3d4de); g1.rotation.x = Math.PI / 2; g1.position.set(c, c, 0); plano.add(g1);
-  const g10 = new THREE.GridHelper(L, Math.round(L / 10), 0x7f9bab, 0x8fa9b8); g10.rotation.x = Math.PI / 2; g10.position.set(c, c, 0.01); plano.add(g10);
-  const borda = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0.02), new THREE.Vector3(L, 0, 0.02), new THREE.Vector3(L, L, 0.02), new THREE.Vector3(0, L, 0.02)]), new THREE.LineBasicMaterial({ color: 0x56656c }));
+  const LX = mesaX, LY = mesaY, L = Math.max(LX, LY);
+  const chao = new THREE.Mesh(mesaRedonda ? new THREE.CircleGeometry(LX / 2, 128) : new THREE.PlaneGeometry(LX, LY), new THREE.MeshBasicMaterial({ color: 0xcfe0ea, transparent: true, opacity: 0.55, depthWrite: false }));
+  chao.position.set(LX / 2, LY / 2, -0.02); plano.add(chao);
+  const passoForte = passoGrade >= 10 ? 50 : 10;
+  if (passoGrade < passoForte) plano.add(linhasGrade(LX, LY, passoGrade, 0xbfd0da, 0));
+  plano.add(linhasGrade(LX, LY, passoForte, 0x8fa9b8, 0.01));
+  const contorno = mesaRedonda
+    ? Array.from({ length: 160 }, (_, i) => new THREE.Vector3(LX / 2 + LX / 2 * Math.cos(i / 160 * Math.PI * 2), LY / 2 + LX / 2 * Math.sin(i / 160 * Math.PI * 2), 0.02))
+    : [new THREE.Vector3(0, 0, 0.02), new THREE.Vector3(LX, 0, 0.02), new THREE.Vector3(LX, LY, 0.02), new THREE.Vector3(0, LY, 0.02)];
+  const borda = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(contorno), new THREE.LineBasicMaterial({ color: 0x56656c }));
   plano.add(borda);
   const seta = Math.min(40, L * 0.2);
   plano.add(new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 0.03), seta, 0xc0392b, 5, 2.5));
   plano.add(new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 0.03), seta, 0x2e8b3e, 5, 2.5));
   plano.add(new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0.03), seta * 0.75, 0x2a62b8, 5, 2.5));
-  for (const b of document.querySelectorAll('[data-cmd^="mesa"]')) b.classList.toggle('ativo', b.dataset.cmd === 'mesa' + L);
+  const padrao = !mesaRedonda && LX === LY && [200, 220, 256, 300].includes(LX);
+  for (const b of document.querySelectorAll('[data-cmd^="mesa"]')) b.classList.toggle('ativo', padrao ? b.dataset.cmd === 'mesa' + LX : b.dataset.cmd === 'mesaPersonalizada');
+  const bp = document.querySelector('[data-cmd=mesaPersonalizada] span'); if (bp) bp.textContent = padrao ? tr('Mesa personalizada…') : mesaRedonda ? tt`Mesa personalizada (redonda, Ø ${LX} mm)…` : tt`Mesa personalizada (${LX} × ${LY} mm)…`;
+  for (const b of document.querySelectorAll('[data-cmd^="grade"]')) b.classList.toggle('ativo', b.dataset.cmd === 'grade' + String(passoGrade).replace('.', ''));
   // marca fora da mesa: embaixo da borda da frente, alinhada à direita
-  const larg = L * 0.42, alt = larg / MARCA_PROP;
+  const larg = Math.min(LX, 300) * 0.42 * Math.max(1, LX / 300) ** 0.5, alt = larg / MARCA_PROP;
   const marca = new THREE.Mesh(new THREE.PlaneGeometry(larg, alt), new THREE.MeshBasicMaterial({ map: texturaMarca(), transparent: true, depthWrite: false }));
-  marca.position.set(L - larg / 2, -alt / 2 - L * 0.004, -0.01); marca.renderOrder = -1; marca.userData.marca = true; plano.add(marca);
+  marca.position.set(LX - larg / 2, -alt / 2 - L * 0.004, -0.01); marca.renderOrder = -1; marca.userData.marca = true; plano.add(marca);
   chao.userData.chao = true;
 }
 montarMesa();
-function trocarMesa(L) { ladoMesa = L; localStorage.setItem('mesa', L); montarMesa(); enquadrar('iso'); mensagem(tt`Mesa de ${L} × ${L} mm.`); }
+function trocarMesa(L, LY = L, redonda = false) {
+  mesaRedonda = redonda; if (redonda) LY = L;
+  mesaX = L; mesaY = LY; ladoMesa = Math.max(L, LY);
+  localStorage.setItem('mesaX', L); localStorage.setItem('mesaY', LY); localStorage.setItem('mesa', ladoMesa); localStorage.setItem('mesaForma', redonda ? 'redonda' : 'retangular');
+  montarMesa(); enquadrar('iso'); mensagem(redonda ? tt`Mesa redonda de Ø ${L} mm.` : tt`Mesa de ${L} × ${LY} mm.`);
+}
+function trocarGrade(p) { passoGrade = p; localStorage.setItem('grade', p); montarMesa(); desenhar(); mensagem(tt`Grade da mesa a cada ${fmt(p, p % 1 ? 1 : 0)} mm.`); }
+function pedirMesaPersonalizada() {
+  const ix = el('input', { type: 'number', min: 50, max: 1000, step: 1, value: mesaX }), iy = el('input', { type: 'number', min: 50, max: 1000, step: 1, value: mesaY });
+  const forma = el('select', {}, el('option', { value: 'retangular', selected: !mesaRedonda }, tr('Retangular')), el('option', { value: 'redonda', selected: mesaRedonda }, tr('Redonda (impressora delta)')));
+  const linhaY = campo(tr('Profundidade Y (mm)'), iy, true), rotX = campo(tr('Largura X (mm)'), ix, true);
+  const atualizar = () => { const r = forma.value === 'redonda'; linhaY.hidden = r; rotX.firstChild.textContent = r ? tr('Diâmetro (mm)') : tr('Largura X (mm)'); };
+  forma.onchange = atualizar;
+  const ok = () => {
+    const x = Math.round(Math.max(50, Math.min(1000, lerNumero(ix.value) || mesaX))), y = Math.round(Math.max(50, Math.min(1000, lerNumero(iy.value) || mesaY)));
+    fecharModal(); trocarMesa(x, y, forma.value === 'redonda');
+  };
+  for (const i of [ix, iy]) i.addEventListener('keydown', e => { if (e.key === 'Enter') ok(); });
+  abrirModal(tr('Mesa personalizada'), el('div', { class: 'sobre' },
+    el('p', { class: 'dica' }, tr('Tamanho da área de impressão da sua impressora, de 50 a 1000 mm em cada lado.')),
+    campo(tr('Formato'), forma, true), rotX, linhaY,
+    el('div', { class: 'botoes' }, el('button', { onclick: fecharModal }, tr('Cancelar')), el('button', { class: 'primario', onclick: ok }, tr('Aplicar')))), true);
+  atualizar(); setTimeout(() => { ix.focus(); ix.select(); }, 0);
+}
 // peças novas nascem no centro da mesa (os testes antigos pedem a origem)
 const posicaoNova = () => (localStorage.getItem('teste:origem') ? [0, 0, 0] : centroMesa());
 
@@ -174,8 +226,18 @@ cena.add(gizmo.getHelper());
 // o gizmo é desenhado por último, por cima da mesa transparente e de peças translúcidas (furos,
 // opacidade): antes eles eram pintados por cima dele e o deixavam acinzentado
 gizmo.getHelper().traverse(o => { o.renderOrder = 1000; });
+// sem a linha comprida do eixo (quase branca, atravessando a tela) ao passar o mouse num anel de giro:
+// o próprio anel destacado já mostra em volta de qual eixo a peça vai girar
+for (const h of gizmo._gizmo?.helper?.rotate?.children ?? []) if (h.name === 'AXIS' && h.material) { h.material = h.material.clone(); h.material.visible = false; }
 gizmo.addEventListener('change', desenhar);
 gizmo.addEventListener('dragging-changed', e => { orbita.enabled = !e.value; });
+// segurança: se um arraste não recebeu o "soltar" (botão solto fora da janela, troca de janela com
+// Alt+Tab…), a vista ficava travada — sem zoom pela roda e sem girar. Qualquer novo clique, a roda ou
+// a janela perdendo o foco religam a órbita quando nada está sendo arrastado.
+function religarOrbita() { if (!arrasteCorpo && !arrasteAlca && !gizmo.dragging) orbita.enabled = true; }
+window.addEventListener('blur', () => { if (arrasteCorpo) { arrasteCorpo = null; cotaMov.hidden = true; limparCotasMov(); atualizarVisual(); } religarOrbita(); });
+renderer.domElement.addEventListener('wheel', religarOrbita, { capture: true, passive: true });
+window.addEventListener('pointerdown', religarOrbita, true);
 
 // ---------- ferramenta de arestas (fillet / chanfro) ----------
 const MAT = {
@@ -255,6 +317,7 @@ function validarModos() {
   if ((JF || AL || FM) && !E.sel.some(existe)) { sairJF(); sairAlinhar(); sairFM(); cancelou = true; }
   if (ALN && E.sel.filter(existe).length < 2) { sairAlinharObj(); cancelou = true; }
   if (ESP && !E.sel.some(existe)) { sairEspelhar(); cancelou = true; }
+  if (AF && !existe(AF.id)) { sairAplicarFace(); cancelou = true; }
   if (ALN) montarPontosAlinhar();
   if (ESP) montarSetasEspelho();
   if (cancelou) mensagem(tr('Operação cancelada: a peça não existe mais.'));
@@ -747,7 +810,7 @@ async function importarStl() {
   const b = new THREE.Box3().setFromBufferAttribute(new THREE.BufferAttribute(d.v, 3)), c = b.getCenter(new THREE.Vector3());
   // se o STL já cabe na mesa (veio de uma mesa de impressora ou do próprio Anvil3D), mantém o lugar dele;
   // senão, a peça chega centrada e apoiada no meio da mesa. A origem local fica no centro da base.
-  const naMesa = b.min.x >= -0.01 && b.min.y >= -0.01 && b.max.x <= ladoMesa + 0.01 && b.max.y <= ladoMesa + 0.01 && b.min.z >= -0.01;
+  const naMesa = b.min.x >= -0.01 && b.min.y >= -0.01 && b.max.x <= mesaX + 0.01 && b.max.y <= mesaY + 0.01 && (!mesaRedonda || [[b.min.x, b.min.y], [b.max.x, b.min.y], [b.min.x, b.max.y], [b.max.x, b.max.y]].every(([x, y]) => Math.hypot(x - mesaX / 2, y - mesaY / 2) <= mesaX / 2 + 0.01)) && b.min.z >= -0.01;
   for (let i = 0; i < d.v.length; i += 3) { d.v[i] -= c.x; d.v[i + 1] -= c.y; d.v[i + 2] -= b.min.z; }
   const no = novaMalha(r.nome, CORES[E.corIdx++ % CORES.length]);
   no.transformacao.posicao = naMesa ? [arred(c.x), arred(c.y), arred(b.min.z)] : posicaoNova();
@@ -1455,6 +1518,7 @@ function montarSetasEspelho() {
   grupoEspelho.clear();
   if (!ESP || !E.sel.length) return desenhar();
   const b = caixaSelecao(), c = b.getCenter(new V3()), t = b.getSize(new V3());
+  grupoEspelho.userData = { b, c, t };
   const off = Math.max(6, 0.15 * Math.max(t.x, t.y, t.z));
   for (const [eixo, dir, pos] of [['x', new V3(1, 0, 0), new V3(c.x, b.min.y - off, b.min.z + 0.05)], ['y', new V3(0, 1, 0), new V3(b.max.x + off, c.y, b.min.z + 0.05)], ['z', new V3(0, 0, 1), new V3(b.min.x - off, b.min.y - off, c.z)]]) {
     const L = Math.max(10, (eixo === 'x' ? t.x : eixo === 'y' ? t.y : t.z) * 0.7);
@@ -1792,44 +1856,106 @@ function repararNo(no) {
 // ---------- aplicar na face: a peça vai para o ponto clicado, deitada na superfície (inclinada ou não),
 // e é projetada nela acompanhando as curvas ----------
 let AF = null;
+const grupoPreviaAF = new THREE.Group(); cena.add(grupoPreviaAF);
 function entrarAplicarFace() {
   if (E.sel.length !== 1) return mensagem(tr('Selecione a peça a aplicar (por exemplo, um texto).'), true);
-  encerrarModos(); AF = { id: E.sel[0] }; gizmo.detach(); vista.classList.add('escolhendo');
+  encerrarModos(); AF = { id: E.sel[0], alvo: null, giro: 0, escala: 100, timer: 0, modo: 'curva', afundar: 0.3 };
+  // durante a escolha e a prévia a peça não fica selecionada: sem alças, cotas nem setas no lugar antigo
+  E.sel = []; atualizarVisual(); gizmo.detach(); vista.classList.add('escolhendo');
+  montarPainel();
   mensagem(tr('Aplicar na face: clique no ponto da superfície de outra peça onde ela deve ficar (Esc cancela).'));
 }
-function sairAplicarFace() { if (!AF) return; AF = null; vista.classList.remove('escolhendo'); atualizarVisual(); }
-function clicarAF(e) {
-  const A = noPorId(AF.id), mA = malhas.get(AF.id);
-  const hit = raioDoMouse(e).intersectObjects([...malhas.values()].filter(m => m !== mA), false)[0];
-  if (!hit || !hit.face) { sairAplicarFace(); return mensagem(tr('Aplicar na face cancelado.')); }
-  const B = noPorId(hit.object.userData.id); if (!B) return;
-  const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
-  // eixo da espessura da peça (o menor lado, no referencial dela)
+function limparPreviaAF() { for (const o of [...grupoPreviaAF.children]) { o.geometry.dispose(); o.material.dispose(); grupoPreviaAF.remove(o); } }
+function sairAplicarFace() {
+  if (!AF) return;
+  clearTimeout(AF.timer); limparPreviaAF();
+  const mA = malhas.get(AF.id); if (mA) mA.visible = true;
+  if (!E.sel.length && noPorId(AF.id)) E.sel = [AF.id]; // cancelou: a peça volta a ficar selecionada
+  AF = null; vista.classList.remove('escolhendo'); atualizarVisual(); montarPainel(); desenhar();
+}
+// matriz da peça deitada no ponto escolhido, com o giro (em volta da normal) e o tamanho do painel
+function matrizAF() {
+  const A = noPorId(AF.id), mA = malhas.get(AF.id), t = A.transformacao, n = AF.n;
   mA.geometry.computeBoundingBox();
-  const bl = mA.geometry.boundingBox, t = A.transformacao, tl = bl.getSize(new V3()).multiply(new V3(...t.escala.map(Math.abs)));
-  const ka = [tl.x, tl.y, tl.z].indexOf(Math.min(tl.x, tl.y, tl.z)), eixo = new V3().setComponent(ka, 1);
-  // orientação: espessura da peça → normal da face; o lado mais comprido da peça → "direita" da tela
-  // projetada na face (fica legível de onde você está olhando); o terceiro eixo fecha um giro válido
-  const zL = n.clone(), dirTela = new V3(1, 0, 0).applyQuaternion(camera.quaternion);
-  let xL = dirTela.sub(zL.clone().multiplyScalar(dirTela.dot(zL)));
+  const bl = mA.geometry.boundingBox, k = AF.escala / 100, esc = t.escala.map(x => x * k);
+  const tl = bl.getSize(new V3()).multiply(new V3(...esc.map(Math.abs)));
+  const ka = [tl.x, tl.y, tl.z].indexOf(Math.min(tl.x, tl.y, tl.z));
+  const zL = n.clone();
+  let xL = AF.direita.clone().sub(zL.clone().multiplyScalar(AF.direita.dot(zL)));
   if (xL.lengthSq() < 1e-6) xL = new V3(0, 0, 1).cross(zL);
   if (xL.lengthSq() < 1e-6) xL = new V3(1, 0, 0).cross(zL);
-  xL.normalize();
+  xL.normalize().applyAxisAngle(zL, AF.giro * RAD);
   const dims = [tl.x, tl.y, tl.z], iw = [0, 1, 2].filter(i => i !== ka).sort((a, b) => dims[b] - dims[a])[0], ir = 3 - ka - iw;
-  const loc = new THREE.Matrix4(), mundo = new THREE.Matrix4();
-  const eL = i => new V3().setComponent(i, 1);
-  loc.makeBasis(eL(iw), eL(ir), eL(ka));
-  let yL = zL.clone().cross(xL);
-  mundo.makeBasis(xL, yL, zL);
-  let R = mundo.clone().multiply(loc.clone().transpose());
+  const eL = i => new V3().setComponent(i, 1), loc = new THREE.Matrix4().makeBasis(eL(iw), eL(ir), eL(ka));
+  let yL = zL.clone().cross(xL), mundo = new THREE.Matrix4().makeBasis(xL, yL, zL), R = mundo.clone().multiply(loc.clone().transpose());
   if (R.determinant() < 0) { yL.negate(); mundo.makeBasis(xL, yL, zL); R = mundo.clone().multiply(loc.clone().transpose()); }
-  const q = new THREE.Quaternion().setFromRotationMatrix(R);
-  const cL = bl.getCenter(new V3()), M = new THREE.Matrix4()
-    .compose(hit.point.clone().addScaledVector(n, tl.getComponent(ka) / 2 + 0.5), q, new V3(...t.escala))
+  const q = new THREE.Quaternion().setFromRotationMatrix(R), cL = bl.getCenter(new V3());
+  return new THREE.Matrix4().compose(AF.ponto.clone().addScaledVector(n, tl.getComponent(ka) / 2 + 0.5), q, new V3(...esc))
     .multiply(new THREE.Matrix4().makeTranslation(-cL.x, -cL.y, -cL.z));
+}
+function copiaPosicionadaAF() { const A = noPorId(AF.id), c = { ...structuredClone(A), transformacao: { ...A.transformacao } }; definirMatriz(c, matrizAF()); return c; }
+// prévia: o decalque é calculado de novo (em qualidade mais baixa) a cada ajuste, um instante depois
+function agendarPreviaAF(atraso = 120) {
+  if (!AF?.alvo) return;
+  clearTimeout(AF.timer);
+  AF.timer = setTimeout(() => {
+    if (!AF?.alvo) return;
+    let res;
+    try { res = calcularProjecao(copiaPosicionadaAF(), noPorId(AF.alvo), AF.n.clone().negate(), 70, { modo: AF.modo, afundar: AF.afundar }); }
+    catch (e) { return mensagem(e.message, true); }
+    AF.aviso = res.avisoCurva; const d = dadosMalha(res); res.delete();
+    limparPreviaAF();
+    const av = document.querySelector('#aviso-curva-af'); if (av) av.hidden = !AF.aviso;
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(d.posicoes), 3)); g.setIndex(new THREE.BufferAttribute(new Uint32Array(d.indices), 1)); g.computeVertexNormals();
+    const A = noPorId(AF.id);
+    grupoPreviaAF.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: A.furo ? 0x8a9399 : A.cor, roughness: 0.6, transparent: true, opacity: A.furo ? 0.55 : 0.92 })));
+    malhas.get(AF.id).visible = false;
+    desenhar();
+  }, atraso);
+}
+function clicarAF(e) {
+  const mA = malhas.get(AF.id);
+  const hit = raioDoMouse(e).intersectObjects([...malhas.values()].filter(m => m !== mA), false)[0];
+  if (!hit || !hit.face) {
+    if (!AF.alvo) { sairAplicarFace(); mensagem(tr('Aplicar na face cancelado.')); }
+    return;
+  }
+  // a "direita" da tela no momento do clique decide para onde o texto corre (fica legível de onde você olha)
+  AF.alvo = hit.object.userData.id; AF.ponto = hit.point.clone();
+  AF.n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
+  AF.direita = new V3(1, 0, 0).applyQuaternion(camera.quaternion);
+  montarPainel(); agendarPreviaAF(0);
+  mensagem(tr('Prévia: ajuste o giro e o tamanho no painel, ou clique em outro ponto. Aplicar confirma; Cancelar (ou Esc) desiste.'));
+}
+function aplicarAF() {
+  if (!AF?.alvo) return;
+  const A = noPorId(AF.id), B = noPorId(AF.alvo), c = copiaPosicionadaAF(), dir = AF.n.clone().negate();
+  mensagem(tr('Projetando na superfície…'));
+  let res;
+  try { res = calcularProjecao(c, B, dir, 180, { modo: AF.modo, afundar: AF.afundar }); } catch (e) { return mensagem(e.message, true); }
   sairAplicarFace();
-  alterar(() => { definirMatriz(A, M); E.sel = [A.id, B.id]; });
-  projetarNaSuperficie(n.clone().negate());
+  confirmarProjecao(A, res, c);
+}
+function painelAplicarFace() {
+  const linha = (rotulo, min, max, passo, valor, fim, aoMudar) => {
+    const num = el('input', { type: 'number', min, max, step: passo, value: valor, class: 'num-af' });
+    const bar = el('input', { type: 'range', min, max, step: passo, value: valor });
+    bar.oninput = () => { num.value = bar.value; aoMudar(Number(bar.value)); };
+    num.onchange = () => { const v = Math.max(min, Math.min(max, lerNumero(num.value) || 0)); num.value = v; bar.value = v; aoMudar(v); };
+    return campo(rotulo, el('div', { class: 'linha-af' }, bar, num, el('span', {}, fim)));
+  };
+  painel.append(el('h2', {}, tr('Aplicar na face')),
+    el('p', { class: 'dica' }, AF.alvo ? tr('A prévia mostra como vai ficar. Clique em outro ponto para mudar o lugar; gire a vista antes de clicar para mudar a direção do texto.') : tr('Clique no ponto da superfície de outra peça onde a peça deve ficar.')));
+  if (AF.alvo) painel.append(
+    linha(tr('Giro'), -180, 180, 1, AF.giro, '°', v => { AF.giro = v; agendarPreviaAF(); }),
+    linha(tr('Tamanho'), 10, 400, 1, AF.escala, '%', v => { AF.escala = v; agendarPreviaAF(); }),
+    linha(tr('Afundar'), 0, 3, 0.1, AF.afundar, 'mm', v => { AF.afundar = v; agendarPreviaAF(); }),
+    campo(tr('Modo'), el('select', { onchange: e => { AF.modo = e.target.value; agendarPreviaAF(0); } },
+      ...[['curva', tr('Acompanhar a curva')], ['suave', tr('Suavizar (ignora dobras pequenas)')], ['reto', tr('Projetar reto (fica plano)')]].map(([v, r]) => el('option', { value: v, selected: AF.modo === v }, r)))),
+    el('p', { class: 'caixa-aviso', id: 'aviso-curva-af', hidden: !AF.aviso }, tr('Esta área é curva demais para o tamanho da peça: as letras podem deformar. Diminua o tamanho ou use "Suavizar" ou "Projetar reto".')));
+  painel.append(el('div', { class: 'botoes' },
+    ...(AF.alvo ? [el('button', { class: 'primario', onclick: aplicarAF }, tr('Aplicar'))] : []),
+    el('button', { onclick: () => { sairAplicarFace(); mensagem(tr('Aplicar na face cancelado.')); } }, tr('Cancelar'))));
 }
 
 // ---------- projetar uma peça (texto, logotipo…) sobre uma superfície irregular ----------
@@ -1839,11 +1965,21 @@ function clicarAF(e) {
 function projetarNaSuperficie(dirMundo = null) {
   if (!(dirMundo instanceof THREE.Vector3)) dirMundo = null; // chamado por um botão: vem o evento do clique
   if (E.sel.length !== 2) return mensagem(tr('Selecione a peça a aplicar (por exemplo, um texto) e depois a peça de destino, com Shift+clique.'), true);
-  const A = noPorId(E.sel[0]), B = noPorId(E.sel[1]), mB = malhas.get(B.id);
-  if (!A || !mB) return;
+  const A = noPorId(E.sel[0]), B = noPorId(E.sel[1]);
+  if (!A || !malhas.get(B.id)) return;
   mensagem(tr('Projetando na superfície…'));
-  let wA;
-  try { wA = motor.mundo(A); } catch (e) { return mensagem(e.message, true); }
+  let res;
+  try { res = calcularProjecao(A, B, dirMundo); } catch (e) { return mensagem(e.message, true); }
+  confirmarProjecao(A, res);
+}
+// Calcula a peça A decalcada na superfície de B (no mundo). Não mexe no projeto. "finura": quantas
+// amostras no lado maior (menos = mais rápido, usado na prévia enquanto você ajusta)
+// op.modo: 'curva' (acompanha a curva, padrão) · 'reto' (fica plano, só encosta) · 'suave' (acompanha uma
+// versão alisada da superfície, ignorando dobras pequenas); op.afundar: quanto entra na superfície (mm)
+function calcularProjecao(A, B, dirMundo = null, finura = 180, op = {}) {
+  const modo = op.modo || 'curva';
+  const mB = malhas.get(B.id);
+  let wA = motor.mundo(A);
   // com uma direção dada (superfície inclinada), tudo é girado para um referencial em que a projeção
   // é "de cima para baixo" no Z; no fim o resultado volta para o lugar
   let Rot = null, RotInv = null;
@@ -1859,7 +1995,7 @@ function projetarNaSuperficie(dirMundo = null) {
   const cB = new THREE.Box3().setFromObject(mB, true).getCenter(new V3()).getComponent(k), cA = (mn[k] + mx[k]) / 2;
   const s = Rot ? -1 : (cB >= cA ? 1 : -1), D = tam[k], fundo = s > 0 ? mx[k] : mn[k];
   // mapa de alturas: raios paralelos à espessura, de longe, até a superfície do destino
-  const passo = Math.max(0.25, Math.max(tam[u], tam[v]) / 180);
+  const passo = Math.max(0.25, Math.max(tam[u], tam[v]) / finura);
   const nu = Math.ceil(tam[u] / passo) + 3, nv = Math.ceil(tam[v] / passo) + 3, u0 = mn[u] - passo, v0 = mn[v] - passo;
   const mapa = new Float64Array(nu * nv).fill(NaN);
   // triângulos do destino (em coordenadas do mundo), distribuídos numa grade no plano u-v para cada raio
@@ -1892,7 +2028,7 @@ function projetarNaSuperficie(dirMundo = null) {
   }
   // pontos sem superfície embaixo: pegam o valor do vizinho mais perto (preenchimento por camadas)
   let validos = mapa.filter(x => !Number.isNaN(x)).length;
-  if (!validos) { wA.delete(); return mensagem(tr('A peça não fica em cima do destino nessa direção: posicione-a de frente para a superfície.'), true); }
+  if (!validos) { wA.delete(); throw new Error(tr('A peça não fica em cima do destino nessa direção: posicione-a de frente para a superfície.')); }
   for (let rodada = 0; rodada < nu + nv && validos < mapa.length; rodada++) {
     const novo = mapa.slice();
     for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
@@ -1901,13 +2037,22 @@ function projetarNaSuperficie(dirMundo = null) {
     }
     mapa.set(novo);
   }
+  // modo suave: alisa o mapa de alturas (média em janela de ~20% do tamanho da peça, 3 passadas)
+  if (modo === 'suave') {
+    const r = Math.max(1, Math.round(0.2 * Math.min(tam[u], tam[v]) / passo));
+    for (let passada = 0; passada < 3; passada++) {
+      const tmp = new Float64Array(mapa.length);
+      for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) { let sm = 0, c = 0; for (let d = -r; d <= r; d++) { const x = i + d; if (x >= 0 && x < nu) { sm += mapa[x * nv + j]; c++; } } tmp[i * nv + j] = sm / c; }
+      for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) { let sm = 0, c = 0; for (let d = -r; d <= r; d++) { const y = j + d; if (y >= 0 && y < nv) { sm += tmp[i * nv + y]; c++; } } mapa[i * nv + j] = sm / c; }
+    }
+  }
   const amostra = (pu, pv) => {
     const fi = Math.max(0, Math.min(nu - 1.001, (pu - u0) / passo)), fj = Math.max(0, Math.min(nv - 1.001, (pv - v0) / passo));
     const i = Math.floor(fi), j = Math.floor(fj), a = fi - i, b = fj - j, M = (x, y) => mapa[x * nv + y];
     return M(i, j) * (1 - a) * (1 - b) + M(i + 1, j) * a * (1 - b) + M(i, j + 1) * (1 - a) * b + M(i + 1, j + 1) * a * b;
   };
-  const embute = A.furo ? D - Math.min(0.5, D / 3) : Math.min(0.3, D / 4);
-  let res;
+  const embute = A.furo ? D - Math.min(0.5, D / 3) : (Number.isFinite(op.afundar) ? Math.min(op.afundar, D * 0.9) : Math.min(0.3, D / 4));
+  let res, avisoCurva = false;
   try {
     const fino = wA.refineToLength(passo * 1.5); wA.delete();
     // "decalque de verdade": (1) as distâncias ao longo da superfície são preservadas — o texto acompanha
@@ -1927,7 +2072,22 @@ function projetarNaSuperficie(dirMundo = null) {
       let lo = 0, hi = n - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (A[m] <= alvo) lo = m; else hi = m; }
       return origem + (lo + (alvo - A[lo]) / (A[hi] - A[lo] || 1)) * passo;
     };
-    res = fino.warp(p => {
+    // aviso: superfície curva demais para o tamanho da peça (normais variando mais de 55° na área dela)
+    if (modo === 'curva') {
+      let maxAng = 0;
+      const grad = (pu, pv) => [(amostra(pu + passo, pv) - amostra(pu - passo, pv)) / (2 * passo), (amostra(pu, pv + passo) - amostra(pu, pv - passo)) / (2 * passo)];
+      const g0 = grad((mn[u] + mx[u]) / 2, (mn[v] + mx[v]) / 2), n0 = [-g0[0], -g0[1], 1], l0 = Math.hypot(...n0);
+      for (let i = 0; i <= 8; i++) for (let j = 0; j <= 8; j++) {
+        const g = grad(mn[u] + tam[u] * i / 8, mn[v] + tam[v] * j / 8), n1 = [-g[0], -g[1], 1], l1 = Math.hypot(...n1);
+        maxAng = Math.max(maxAng, Math.acos(Math.max(-1, Math.min(1, (n0[0] * n1[0] + n0[1] * n1[1] + n0[2] * n1[2]) / (l0 * l1)))));
+      }
+      avisoCurva = maxAng > 55 * Math.PI / 180;
+    }
+    if (modo === 'reto') {
+      // plano: a peça inteira só desce até encostar no ponto central, sem se deformar
+      const hc = amostra((mn[u] + mx[u]) / 2, (mn[v] + mx[v]) / 2);
+      res = fino.warp(p => { const t = (fundo - p[k]) * s; p[k] = hc - s * (t - embute); });
+    } else res = fino.warp(p => {
       const t = (fundo - p[k]) * s, off = t - embute;
       const pu = inverso(AU, AU0 + (p[u] - uc), u0), pv = inverso(AV, AV0 + (p[v] - vc), v0);
       const h = amostra(pu, pv), hu = (amostra(pu + passo, pv) - amostra(pu - passo, pv)) / (2 * passo), hv = (amostra(pu, pv + passo) - amostra(pu, pv - passo)) / (2 * passo);
@@ -1935,8 +2095,12 @@ function projetarNaSuperficie(dirMundo = null) {
       p[u] = pu + o * (-hu / L) * off; p[v] = pv + o * (-hv / L) * off; p[k] = h + o * (1 / L) * off;
     });
     fino.delete();
-  } catch (e) { return mensagem(tr('Não foi possível projetar: ') + e.message, true); }
+  } catch (e) { throw new Error(tr('Não foi possível projetar: ') + e.message); }
   if (RotInv) { const g = res.transform(RotInv.elements); res.delete(); res = g; }
+  res.avisoCurva = avisoCurva;
+  return res;
+}
+function confirmarProjecao(A, res, receitaNo = A) {
   const d = deManifold(res); res.delete();
   const b2 = new THREE.Box3().setFromBufferAttribute(new THREE.BufferAttribute(d.v, 3)), c2 = b2.getCenter(new V3());
   const P = [arred(c2.x), arred(c2.y), arred(b2.min.z)];
@@ -1946,7 +2110,7 @@ function projetarNaSuperficie(dirMundo = null) {
     const novo = novaMalha(tt`${A.nome} (na superfície)`, A.cor);
     gravarMalha(novo, d); novo.furo = !!A.furo;
     novo.transformacao = { posicao: P, rotacao: [0, 0, 0], escala: [1, 1, 1] };
-    const r = structuredClone(A); definirMatriz(r, Pi.clone().multiply(matrizDoNo(A))); novo.receita = [r];
+    const r = structuredClone(receitaNo); r.id = A.id; definirMatriz(r, Pi.clone().multiply(matrizDoNo(receitaNo))); novo.receita = [r];
     const idx = E.doc.objetos.indexOf(A);
     E.doc.objetos.splice(idx, 1, novo);
     E.sel = [novo.id];
@@ -2035,9 +2199,40 @@ function ajustarMesaPorBaixo() {
     else if (o.isLineSegments || o.isLine) { o.material.transparent = true; o.material.opacity = baixo ? 0.7 : 1; }
   });
 }
+// Setas do espelhar: o tamanho acompanha a PEÇA (como as alças), mas sem ficar menor que ~26 px nem maior
+// que ~110 px na tela; cada seta fica num lado diferente da peça, afastada na proporção do próprio tamanho
+// — com zoom para longe elas não crescem mais que a peça nem se amontoam umas sobre as outras.
 function escalarSetasEspelho() {
-  for (const s of grupoEspelho.children) { const k = camera.position.distanceTo(s.position) * 0.16; s.scale.set(k * 0.35, k, k * 0.35); }
+  const { b, c, t } = grupoEspelho.userData; if (!b) return;
+  const alt = renderer.domElement.clientHeight || 600;
+  const pxPorMM = p => alt / (2 * camera.position.distanceTo(p) * Math.tan(camera.fov * RAD / 2));
+  for (const s of grupoEspelho.children) {
+    const e = s.userData.espelho, dimEixo = e === 'x' ? t.x : e === 'y' ? t.y : t.z;
+    const px = pxPorMM(c);
+    const L = Math.min(110 / px, Math.max(26 / px, Math.max(dimEixo, Math.max(t.x, t.y, t.z) * 0.5) * 0.7));
+    const off = Math.max(0.15 * Math.max(t.x, t.y, t.z), L * 0.45, 3 / px * 4);
+    if (e === 'x') s.position.set(c.x, b.min.y - off, b.min.z + 0.05);
+    else if (e === 'y') s.position.set(b.max.x + off, c.y, b.min.z + 0.05);
+    else s.position.set(b.min.x - off, b.min.y - off, c.z);
+    // espessura fixa na tela: haste de ~5 px e pontas de ~18 px, como as setas do mover (só afina se a seta for curta)
+    const g = Math.min(42 / px, L * 0.9);
+    s.scale.set(g, L, g);
+  }
 }
+// Centro do texto nos botões da barra. Medido no print do Windows (Bahnschrift 13px, botão de 30px):
+// as maiúsculas ficavam ~2,5 px acima do meio (a fonte sobra espaço embaixo). Com a Bahnschrift o texto
+// é empurrado para baixo; com outras fontes (que já centralizam) nada muda.
+function ajustarCentroTexto() {
+  const temBahn = document.fonts?.check?.('600 13px Bahnschrift') && [...document.fonts].length >= 0 && (() => {
+    const c = document.createElement('canvas').getContext('2d'), t = 'HAMEOV';
+    c.font = '600 13px Bahnschrift, monospace'; const a = c.measureText(t).width;
+    c.font = '600 13px monospace'; return Math.abs(a - c.measureText(t).width) > 0.5;   // a fonte existe de verdade
+  })();
+  document.documentElement.style.setProperty('--empurra-texto', temBahn ? '5px' : '0px');
+  document.documentElement.style.setProperty('--empurra-modo', temBahn ? '5px' : '0px');
+  window.__anvilCentroTexto = { bahnschrift: !!temBahn };
+}
+(document.fonts?.ready ?? Promise.resolve()).then(() => ajustarCentroTexto());
 // ---------- área escura dos furos, desenhada pela placa de vídeo a cada quadro ----------
 // Em vez de calcular a intersecção sólido × furo (lento: dava saltos e rastro ao arrastar), cada pixel
 // de sólido que está DENTRO do volume de algum furo é escurecido, usando o stencil: as faces da frente do
@@ -2337,6 +2532,7 @@ function atualizarVisual() {
     lin.transparent = true; lin.opacity = sel ? 1 : 0.35;
     mat.needsUpdate = true;
   }
+  pivoDaSelecao();
   const prim = malhas.get(E.sel[E.sel.length - 1]);
   const preso = E.sel.length === 1 && juncaoAtiva(noPorId(E.sel[0]));
   if (prim && !MA && !ME && !JF && !AL && !FM && !ALN && !ESP && E.modoGizmo === 'girar') { posicionarAjudanteGiro(); gizmo.attach(ajudanteGiro); }
@@ -2354,9 +2550,30 @@ function caixaSelecao() {
   for (const id of E.sel) { const m = malhas.get(id); if (m) { m.updateMatrixWorld(true); b.expandByObject(m, true); } }
   return b;
 }
+// O "ponto escolhido" vale só para a seleção em que foi escolhido: ao selecionar outra peça (ou criar
+// uma nova), o giro volta para o centro — antes o gizmo continuava no ponto da peça anterior.
+function pivoDaSelecao() {
+  // qualquer pivô escolhido (base, canto, origem, ponto) vale só para a seleção em que foi escolhido:
+  // trocou de peça, de grupo ou de conjunto selecionado, o giro volta para o centro
+  const chave = E.sel.join();
+  if (E.pivoDono !== chave) { E.pivoDono = chave; if (E.pivo !== 'centro') { E.pivo = 'centro'; localStorage.setItem('pivo', 'centro'); } }
+}
+// Durante uma sequência de giros da mesma seleção, o pivô fica parado: girar muda a caixa envolvente
+// (alinhada aos eixos), e o centro dela "andava" a cada giro, levando o gizmo junto. O pivô só é
+// recalculado quando a seleção muda ou quando ela é mexida de outro jeito (mover, redimensionar…).
+const assinaturaSel = () => E.sel.map(id => JSON.stringify(noPorId(id)?.transformacao)).join('|');
 function pontoPivo() {
   const sel = selecionados();
   if (!sel.length) return null;
+  pivoDaSelecao();
+  if (E.pivo === 'ponto' || E.pivo === 'origem') return pontoPivoCalculado(sel); // não dependem da caixa
+  const chave = E.sel.join() + '|' + E.pivo;
+  if (E.pivoFixo?.chave === chave && E.pivoFixo.ass === assinaturaSel()) return E.pivoFixo.ponto.clone();
+  const p = pontoPivoCalculado(sel);
+  E.pivoFixo = { chave, ponto: p.clone(), ass: assinaturaSel() };
+  return p;
+}
+function pontoPivoCalculado(sel) {
   const b = caixaSelecao(), c = b.getCenter(new THREE.Vector3());
   switch (E.pivo) {
     case 'base': return new THREE.Vector3(c.x, c.y, b.min.z);
@@ -2501,9 +2718,9 @@ function escolherPonto(hit) {
     if (melhor) p = melhor;
   }
   E.pontoPivo = p.toArray().map(v => arred(v, 2));
-  E.pivo = 'ponto'; localStorage.setItem('pivo', 'ponto');
+  E.pivo = 'ponto'; E.pivoDono = E.pontoPivoDono = E.sel.join(); localStorage.setItem('pivo', 'ponto');
   cancelarEscolha();
-  atualizarMarcador(); desenhar(); montarPainel();
+  atualizarVisual(); montarPainel();
   mensagem(tt`Pivô em (${E.pontoPivo.map(v => fmt(v)).join('; ')})`);
 }
 function iniciarEscolha() { E.escolhendoPonto = true; vista.classList.add('escolhendo'); $('#aviso-escolha').hidden = false; gizmo.enabled = false; }
@@ -2676,6 +2893,7 @@ gizmo.addEventListener('mouseUp', () => {
     }
   }
   if (mudou || arraste.mudou) {
+    if (arraste.girar && E.pivoFixo) E.pivoFixo.ass = assinaturaSel();
     hist.registrarTexto(arraste.antes);
     posicionarJuncoes(); reconstruir3d();
     marcarSujo(); montarPainel();
@@ -2712,7 +2930,7 @@ function girar(eixo, angulo) {
   const p = pontoPivo();
   const R = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(...{ x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] }[eixo]), angulo * RAD);
   const T = new THREE.Matrix4().makeTranslation(p.x, p.y, p.z).multiply(R).multiply(new THREE.Matrix4().makeTranslation(-p.x, -p.y, -p.z));
-  alterar(() => { for (const no of sel) definirMatriz(no, T.clone().multiply(matrizDoNo(no))); });
+  alterar(() => { for (const no of sel) definirMatriz(no, T.clone().multiply(matrizDoNo(no))); if (E.pivoFixo) E.pivoFixo.ass = assinaturaSel(); });
   mensagem(tt`Girado ${fmt(angulo, 1)}° em ${eixo.toUpperCase()} em torno de (${p.toArray().map(v => fmt(v)).join('; ')}).`);
 }
 
@@ -2810,12 +3028,20 @@ function moverTeclado(dx, dy, dz) {
 }
 
 // ---------- arquivos ----------
-function confirmarDescarte() { return !E.sujo || confirm(tr('Há alterações não salvas. Descartar?')); }
+// Antes de trocar de projeto (Novo, Abrir…): a mesma pergunta do fechar a janela — Salvar, Não salvar
+// ou Cancelar. Antes aqui era só "Descartar? OK/Cancelar", sem a opção de salvar.
+async function confirmarDescarte() {
+  if (!E.sujo) return true;
+  const r = await anvil.perguntarSalvar();
+  if (r === 2) return false;            // Cancelar
+  if (r === 0) { await salvar(); return !E.sujo; } // Salvar: só segue se salvou mesmo
+  return true;                          // Não salvar
+}
 function carregarProjeto(doc, caminho) {
   E.doc = doc; E.caminho = caminho; E.sel = []; hist.limpar();
   marcarSujo(false); reconstruir3d(); montarPainel(); enquadrar('iso');
 }
-async function novo() { if (confirmarDescarte()) carregarProjeto(novoDocumento(), null); }
+async function novo() { if (await confirmarDescarte()) carregarProjeto(novoDocumento(), null); }
 async function abrirArquivo(r) {
   try { carregarProjeto(carregarDocumento(r.texto), r.caminho); mensagem(tt`Aberto: ${r.caminho}`); }
   catch (e) { mensagem(e.message, true); alert(e.message); }
@@ -2918,7 +3144,7 @@ async function montarNavegador({ aoClicarProjeto, aoDuploProjeto }) {
 }
 
 async function janelaAbrir() {
-  if (!confirmarDescarte()) return;
+  if (!(await confirmarDescarte())) return;
   let escolhido = null;
   const grande = el('div', { class: 'abrir-previa-img' }, el('span', {}, tr('Escolha um projeto à esquerda')));
   const info = el('div', { class: 'abrir-info' }), descr = el('div', { class: 'abrir-descricao' });
@@ -3085,7 +3311,7 @@ function enquadrar(vistaNome) {
   for (const m of malhas.values()) b.expandByObject(m, true);
   // vistas prontas mostram a mesa inteira (origem na quina de baixo à esquerda); F enquadra só as peças
   const comMesa = b.isEmpty() || (vistaNome && !localStorage.getItem('teste:origem'));
-  if (comMesa) { b.expandByPoint(new THREE.Vector3(0, 0, 0)); b.expandByPoint(new THREE.Vector3(ladoMesa, ladoMesa, 20)); }
+  if (comMesa) { b.expandByPoint(new THREE.Vector3(0, 0, 0)); b.expandByPoint(new THREE.Vector3(mesaX, mesaY, 20)); }
   const c = b.getCenter(new THREE.Vector3()), r = Math.max(b.getSize(new THREE.Vector3()).length() / 2, 10);
   const dist = r / Math.sin((camera.fov * RAD) / 2) * (comMesa ? 0.95 : 1.1);
   const dir = {
@@ -3143,6 +3369,7 @@ function montarPainel() {
   if (ME) return painelME();
   if (ALN) return painelAlinhar();
   if (ESP) return painelEspelhar();
+  if (AF) return painelAplicarFace();
   const sel = selecionados();
   if (!sel.length) {
     painel.append(el('h2', {}, tr('Nada selecionado'), interrog('nada')),
@@ -3167,8 +3394,16 @@ function montarPainel() {
   painel.append(titulo(tr('Tipo'), 'tipo'), el('div', { class: 'segmentado botoes' },
     el('button', { class: todosSolido ? 'ativo' : '', onclick: () => alterar(() => sel.forEach(n => (n.furo = false))) }, tr('Sólido')),
     el('button', { class: todosFuro ? 'ativo' : '', onclick: () => alterar(() => sel.forEach(n => (n.furo = true))) }, tr('Furo'))));
-  if (!todosFuro) painel.append(campo(tr('Cor'), el('input', { type: 'color', value: sel[0].cor,
-    onchange: e => alterar(() => sel.forEach(n => { n.cor = e.target.value; if (n.tipo === 'grupo') n.multicor = false; if (n.tipo === 'acabamento' && n.filhos[0].tipo === 'grupo') n.filhos[0].multicor = false; })) })));
+  if (!todosFuro) {
+    const amostra = el('button', { class: 'amostra-cor', style: `background:${sel[0].cor}`, title: tr('Escolher a cor') });
+    amostra.onclick = () => abrirSeletorCor(amostra, sel[0].cor, {
+      previa: hex => { amostra.style.background = hex; previaCor(sel, hex); },
+      confirmar: hex => { previaCor(sel, null); if (hex.toLowerCase() === String(sel[0].cor).toLowerCase() && sel.every(n => n.cor === sel[0].cor)) return atualizarVisual();
+        alterar(() => sel.forEach(n => { n.cor = hex; if (n.tipo === 'grupo') n.multicor = false; if (n.tipo === 'acabamento' && n.filhos[0].tipo === 'grupo') n.filhos[0].multicor = false; })); },
+      cancelar: () => { amostra.style.background = sel[0].cor; previaCor(sel, null); },
+    });
+    painel.append(campo(tr('Cor'), amostra));
+  }
   if (!todosFuro) {
     const grupo = unico && (unico.tipo === 'grupo' ? unico : unico.tipo === 'acabamento' && unico.filhos[0].tipo === 'grupo' ? unico.filhos[0] : null);
     if (grupo) painel.append(campo(tr('Multicolorido'), el('input', { type: 'checkbox', checked: grupo.multicor !== false,
@@ -3186,7 +3421,7 @@ function montarPainel() {
     const g = registro.obter(unico.gerador);
     if (g) {
       painel.append(titulo(tr('Parâmetros'), 'parametros'));
-      for (const d of g.parametros) painel.append(controleParametro(unico, d));
+      for (const d of g.parametros) if (parametroVisivel(d, unico)) painel.append(controleParametro(unico, d));
     } else painel.append(el('p', { class: 'dica' }, tr('O plugin deste objeto não está instalado. Os dados dele continuam guardados no arquivo.')));
   }
   if (unico?.tipo === 'acabamento') {
@@ -3204,7 +3439,7 @@ function montarPainel() {
         el('button', { onclick: () => removerAcabamento(unico) }, tr('Remover'))));
     if (gf) {
       painel.append(titulo(tt`Parâmetros (${nomeG(gf)})`, 'parametros'));
-      for (const d of gf.parametros) painel.append(controleParametro(f, d));
+      for (const d of gf.parametros) if (parametroVisivel(d, f)) painel.append(controleParametro(f, d));
     }
   }
   if (unico?.tipo === 'malha') {
@@ -3297,12 +3532,22 @@ function montarPainel() {
 
   // girar em torno de um pivô
   painel.append(titulo(tr('Girar em torno de um ponto'), 'pivo'));
-  const sPivo = el('select', { onchange: e => { E.pivo = e.target.value; localStorage.setItem('pivo', E.pivo); atualizarMarcador(); desenhar(); montarPainel(); } },
+  pivoDaSelecao();
+  const sPivo = el('select', { onchange: e => {
+    E.pivo = e.target.value; E.pivoDono = E.sel.join();
+    // "Ponto escolhido" numa peça nova começa no centro DELA (antes herdava o ponto da peça anterior
+    // e os anéis pulavam para lá, parecendo que a outra peça tinha sido selecionada)
+    if (E.pivo === 'ponto' && E.pontoPivoDono !== E.sel.join()) {
+      E.pontoPivo = caixaSelecao().getCenter(new V3()).toArray().map(v => arred(v, 2)); E.pontoPivoDono = E.sel.join();
+    }
+    if (E.escolhendoPonto && E.pivo !== 'ponto') cancelarEscolha(); // trocou de pivô no meio da escolha: encerra o aviso
+    atualizarVisual(); montarPainel(); // reposiciona os anéis do giro na hora (antes ficava o desenho antigo)
+  } },
     ...[['centro', tr('Centro da caixa')], ['base', tr('Centro da base')], ['canto', tr('Canto mínimo')], ['origem', tr('Origem do objeto')], ['ponto', tr('Ponto escolhido')]]
       .map(([v, r]) => el('option', { value: v, selected: E.pivo === v }, r)));
   painel.append(campo(tr('Pivô'), sPivo));
   if (E.pivo === 'ponto') {
-    painel.append(linhaXYZ(E.pontoPivo, 2, (i, v) => { E.pontoPivo[i] = arred(v, 4); atualizarMarcador(); desenhar(); }),
+    painel.append(linhaXYZ(E.pontoPivo, 2, (i, v) => { E.pontoPivo[i] = arred(v, 4); E.pontoPivoDono = E.sel.join(); atualizarVisual(); }),
       el('div', { class: 'botoes' }, el('button', { class: 'pequeno', onclick: iniciarEscolha }, tr('Escolher no modelo'))));
   }
   painel.append(el('div', { class: 'segmentado botoes' }, ...['x', 'y', 'z'].map(a =>
@@ -3316,6 +3561,87 @@ function montarPainel() {
     ...['x', 'y', 'z'].map(a => el('button', { onclick: () => espelhar(a) }, tt`Espelhar ${a.toUpperCase()}`))));
 }
 
+// parâmetro com "mostrarSe": { chave: valor | [valores] } só aparece quando o outro parâmetro tem esse valor
+// (ex.: no parafuso, "Medida (métrica)" só com rosca métrica). O valor continua guardado.
+function parametroVisivel(d, no) {
+  if (!d.mostrarSe) return true;
+  return Object.entries(d.mostrarSe).every(([k, v]) => { const atual = no.parametros?.[k]; return Array.isArray(v) ? v.includes(atual) : atual === v; });
+}
+// ---------- seletor de cor próprio, com prévia ao vivo ----------
+// Clicar/arrastar já pinta a peça na vista; clicar fora ou Enter confirma; Esc volta a cor original.
+// (o seletor do Windows só devolve a cor no fim, sem prévia)
+const corOriginal = new WeakMap();
+function previaCor(sel, hex) {
+  for (const n of sel) {
+    const m = malhas.get(n.id); if (!m?.material) continue;
+    if (hex === null) { const o = corOriginal.get(m); if (o) { m.material.color.copy(o.cor); m.material.vertexColors = o.vc; m.material.needsUpdate = true; corOriginal.delete(m); } continue; }
+    if (!corOriginal.has(m)) corOriginal.set(m, { cor: m.material.color.clone(), vc: m.material.vertexColors });
+    m.material.color.set(hex); if (m.material.vertexColors) { m.material.vertexColors = false; m.material.needsUpdate = true; }
+  }
+  desenhar();
+}
+const PALETA = ['#d62828', '#f77f00', '#fcbf49', '#e9c46a', '#2a9d8f', '#52b788', '#3a86c8', '#457b9d', '#8338ec', '#c77dff', '#ef476f', '#ff99c8', '#6d4c41', '#8c97a1', '#1d1d1d', '#f1f1f1'];
+let seletorAberto = null;
+function abrirSeletorCor(ancora, corInicial, { previa, confirmar, cancelar }) {
+  if (seletorAberto) seletorAberto.fechar(true);
+  // cores lidas direto do texto (#rrggbb, em sRGB): THREE.Color guarda em espaço linear e escurecia a cor
+  const rgb = c => { const m = /^#?([0-9a-f]{6})$/i.exec(String(c).trim()); const n = m ? parseInt(m[1], 16) : 0x888888; return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
+  const hsv = { h: 0, s: 0, v: 0 };
+  { const [r, g, b] = rgb(corInicial || '#888888'), mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+    hsv.v = mx; hsv.s = mx ? d / mx : 0;
+    hsv.h = !d ? 0 : mx === r ? ((g - b) / d + (g < b ? 6 : 0)) / 6 : mx === g ? ((b - r) / d + 2) / 6 : ((r - g) / d + 4) / 6; }
+  const hex = () => { const h = hsv.h * 6, i = Math.floor(h) % 6, f = h - Math.floor(h), v = hsv.v, s = hsv.s, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+    const [r, g, b] = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i]; return '#' + [r, g, b].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join(''); };
+  const W = 200, Hq = 130;
+  const quad = el('canvas', { width: W, height: Hq, class: 'sc-quad' }), barra = el('canvas', { width: W, height: 14, class: 'sc-barra' });
+  const campoHex = el('input', { class: 'sc-hex', value: hex(), spellcheck: 'false', maxlength: 7 });
+  const amostras = el('div', { class: 'sc-paleta' }, ...PALETA.map(c => el('button', { style: `background:${c}`, title: c, onclick: () => definirHex(c) })));
+  const caixa = el('div', { class: 'seletor-cor', tabindex: '-1' }, quad, barra, el('div', { class: 'sc-linha' }, el('span', { class: 'sc-atual' }), campoHex), amostras,
+    el('div', { class: 'sc-dica' }, tr('Enter ou clicar fora confirma · Esc desfaz')));
+  const desenharSel = () => {
+    const g = quad.getContext('2d');
+    const base = new THREE.Color().setHSL(hsv.h, 1, 0.5);
+    const gh = g.createLinearGradient(0, 0, W, 0); gh.addColorStop(0, '#fff'); gh.addColorStop(1, '#' + base.getHexString()); g.fillStyle = gh; g.fillRect(0, 0, W, Hq);
+    const gv = g.createLinearGradient(0, 0, 0, Hq); gv.addColorStop(0, 'rgba(0,0,0,0)'); gv.addColorStop(1, '#000'); g.fillStyle = gv; g.fillRect(0, 0, W, Hq);
+    g.strokeStyle = hsv.v > 0.5 ? '#000' : '#fff'; g.lineWidth = 2; g.beginPath(); g.arc(hsv.s * W, (1 - hsv.v) * Hq, 6, 0, Math.PI * 2); g.stroke();
+    const b = barra.getContext('2d'), gb = b.createLinearGradient(0, 0, W, 0);
+    for (let i = 0; i <= 6; i++) gb.addColorStop(i / 6, `hsl(${i * 60},100%,50%)`);
+    b.fillStyle = gb; b.fillRect(0, 0, W, 14); b.strokeStyle = '#fff'; b.lineWidth = 2; b.strokeRect(hsv.h * W - 3, 1, 6, 12); b.strokeStyle = '#000'; b.lineWidth = 1; b.strokeRect(hsv.h * W - 4, 0, 8, 14);
+    const hx = hex(); caixa.querySelector('.sc-atual').style.background = hx; if (document.activeElement !== campoHex) campoHex.value = hx;
+  };
+  const mudou = () => { desenharSel(); previa(hex()); };
+  function definirHex(c) {
+    const [r, g, b] = rgb(c), mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+    hsv.v = mx; hsv.s = mx ? d / mx : 0; if (d) hsv.h = mx === r ? ((g - b) / d + (g < b ? 6 : 0)) / 6 : mx === g ? ((b - r) / d + 2) / 6 : ((r - g) / d + 4) / 6;
+    mudou();
+  }
+  const arrastar = (alvo, fn) => alvo.addEventListener('pointerdown', e => {
+    alvo.setPointerCapture(e.pointerId); const r = alvo.getBoundingClientRect();
+    const mover = ev => { fn(Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)), Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height))); mudou(); };
+    mover(e); alvo.onpointermove = mover; alvo.onpointerup = () => { alvo.onpointermove = null; };
+  });
+  arrastar(quad, (x, y) => { hsv.s = x; hsv.v = 1 - y; });
+  arrastar(barra, x => { hsv.h = Math.min(0.9999, x); });
+  campoHex.addEventListener('input', () => { if (/^#?[0-9a-f]{6}$/i.test(campoHex.value.trim())) definirHex('#' + campoHex.value.trim().replace('#', '')); });
+  document.body.append(caixa);
+  const r = ancora.getBoundingClientRect(), wc = 220, hc = caixa.offsetHeight || 260;
+  caixa.style.left = Math.max(8, Math.min(innerWidth - wc - 8, r.right - wc)) + 'px';
+  caixa.style.top = (r.bottom + hc + 8 < innerHeight ? r.bottom + 4 : Math.max(8, r.top - hc - 4)) + 'px';
+  const fora = e => { if (!caixa.contains(e.target) && e.target !== ancora) fechar(true); };
+  const teclas = e => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fechar(false); }
+    else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); fechar(true); }
+  };
+  function fechar(aceitar) {
+    if (seletorAberto !== ctrl) return;
+    seletorAberto = null; caixa.remove();
+    document.removeEventListener('pointerdown', fora, true); window.removeEventListener('keydown', teclas, true);
+    if (aceitar) confirmar(hex()); else cancelar();
+  }
+  const ctrl = { fechar }; seletorAberto = ctrl;
+  setTimeout(() => { document.addEventListener('pointerdown', fora, true); window.addEventListener('keydown', teclas, true); }, 0);
+  desenharSel(); caixa.focus();
+}
 function controleParametro(no, d) {
   if (d.tipo === 'oculto') return document.createComment(d.chave);
   const gp = registro.obter(no.gerador);
@@ -3509,7 +3835,7 @@ vista.addEventListener('drop', e => {
 });
 
 // Biblioteca em categorias (ordem fixa, como no Tinkercad), que abrem e fecham, com busca por nome
-const ORDEM_CATEGORIAS = ['Básicos', 'Poliedros', 'Símbolos', 'Fixadores', 'Mecânica', 'Encaixes', 'Recipientes', 'Geradores'];
+const ORDEM_CATEGORIAS = ['Básicos', 'Poliedros', 'Símbolos', 'Fixadores', 'Mecânica', 'Encaixes', 'Conectores', 'Tijolos', 'Recipientes', 'Geradores'];
 // ao abrir o programa, só os Básicos ficam abertos; dali em diante vale o que a pessoa abrir ou fechar
 const catsFechadas = new Set(), catsVistas = new Set();
 localStorage.removeItem('catFechadas');
@@ -3577,6 +3903,8 @@ async function carregarPlugins() {
 const comandos = {
   novo, abrir, salvar, salvarComo, exportarStl, importarStl, importarSvg, exportarStlPorObjeto,
   mesa200: () => trocarMesa(200), mesa220: () => trocarMesa(220), mesa256: () => trocarMesa(256), mesa300: () => trocarMesa(300),
+  mesaPersonalizada: () => pedirMesaPersonalizada(),
+  grade1: () => trocarGrade(1), grade25: () => trocarGrade(2.5), grade5: () => trocarGrade(5), grade10: () => trocarGrade(10),
   juntarFaces: () => (JF ? sairJF() : entrarJF(false)),
   faceNaMesa: () => (FM ? sairFM() : entrarFM()),
   soltarJuncao: () => {
@@ -3635,7 +3963,7 @@ document.addEventListener('keydown', e => {
 });
 
 // acesso para depuração no console (F12) e testes
-window.__anvil = { abrirTexto: (texto, caminho) => abrirArquivo({ texto, caminho }), motor, moverPeca: v => { moverPeca = v; atualizarVisual(); }, alcasLaterais: v => { alcasLaterais = v; desenhar(); }, criarDeSvg: (t, n) => criarDeSvg(t, n), mostrarCotas: (chave = 'todas') => { alcaHover = null; cotasAlca = chave; cotasAte = performance.now() + 60000; desenhar(); }, get espelho() { return ESP; }, arrasteAlcaInfo: () => arrasteAlca, serializarComMiniatura: () => serializarComMiniatura(), selecionar: ids => { E.sel = ids; atualizarVisual(); montarPainel(); }, gizmo, grupoAfetado, get alinharObj() { return ALN; }, get alinhar() { return AL; }, get modoMalha() { return ME; }, THREE, camera, cena, grupoArestas, malhas, estado: E, get modoAresta() { return MA; } };
+window.__anvil = { get previaAF() { return grupoPreviaAF.children.length; }, orbita, abrirTexto: (texto, caminho) => abrirArquivo({ texto, caminho }), motor, moverPeca: v => { moverPeca = v; atualizarVisual(); }, alcasLaterais: v => { alcasLaterais = v; desenhar(); }, criarDeSvg: (t, n) => criarDeSvg(t, n), mostrarCotas: (chave = 'todas') => { alcaHover = null; cotasAlca = chave; cotasAte = performance.now() + 60000; desenhar(); }, get espelho() { return ESP; }, arrasteAlcaInfo: () => arrasteAlca, serializarComMiniatura: () => serializarComMiniatura(), selecionar: ids => { E.sel = ids; atualizarVisual(); montarPainel(); }, gizmo, grupoAfetado, get alinharObj() { return ALN; }, get alinhar() { return AL; }, get modoMalha() { return ME; }, THREE, camera, cena, grupoArestas, malhas, estado: E, get modoAresta() { return MA; } };
 
 // ---------- idioma ----------
 const originais = new WeakMap();

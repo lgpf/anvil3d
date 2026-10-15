@@ -1,8 +1,8 @@
 // Junta esférica — parte macho: bola presa num pescoço, com base para colar/apoiar. Combina com o Soquete.
 export default {
-  api: 1, id: 'junta-bola', nome: 'Junta: bola', categoria: 'Encaixes', icone: '●', cor: '#2ec4b6', versao: '1.0.0',
+  api: 1, id: 'junta-bola', nome: 'Bola (tamanho livre)', categoria: 'Conectores', ordem: 7, icone: '●', cor: '#2ec4b6', versao: '1.1.0',
   descricao: 'Bola de junta esférica com pescoço e base (encaixa no Soquete)',
-  en: { nome: 'Joint: ball', categoria: 'Joints', descricao: 'Ball joint stud with neck and base (fits the Socket)',
+  en: { nome: 'Ball (any size)', categoria: 'Connectors', descricao: 'Ball joint stud with neck and base (fits the Socket)',
     rotulos: { bola: 'Ball diameter', pescoco: 'Neck diameter', comprimento: 'Neck length', base: 'Base', baseD: 'Base diameter', baseH: 'Base height' },
     opcoes: { disco: 'Disc', nenhuma: 'None', bola: 'Another ball (double ball)' } },
   parametros: [

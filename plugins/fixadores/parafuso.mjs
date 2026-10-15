@@ -33,7 +33,7 @@ function barraRoscada({ Manifold, CrossSection }, { d, passo, tipo, comprimento,
 // cilíndrica (Allen), panela, chata (escareada) ou sem cabeça; fenda, Phillips ou Allen.
 // Sai com a cabeça para baixo, apoiada na mesa, que é a posição boa para imprimir.
 export default {
-  api: 1, id: 'parafuso', nome: 'Parafuso', categoria: 'Fixadores', icone: '⚙', cor: '#8c97a1', versao: '1.0.0',
+  api: 1, id: 'parafuso', nome: 'Parafuso', categoria: 'Fixadores', icone: '⚙', cor: '#8c97a1', versao: '1.1.0',
   descricao: 'Parafuso com rosca de verdade, várias cabeças e fendas',
   en: {
     nome: 'Screw', categoria: 'Fasteners', descricao: 'Screw with a real thread, several heads and drives',
@@ -45,8 +45,8 @@ export default {
   },
   parametros: [
     { chave: 'rosca', rotulo: 'Rosca', tipo: 'opcao', opcoes: [['metrica', 'Métrica (ISO)'], ['soberba', 'Soberba (madeira)'], ['lisa', 'Lisa (sem rosca)']], padrao: 'metrica' },
-    { chave: 'medida', rotulo: 'Medida (métrica)', tipo: 'opcao', opcoes: Object.keys(METRICA).map(k => [k, `${k} × ${METRICA[k][0]}`]), padrao: 'M4' },
-    { chave: 'soberba', rotulo: 'Diâmetro (soberba)', tipo: 'opcao', opcoes: Object.keys(SOBERBA).map(k => [k, k.replace('.', ',') + ' mm']), padrao: '4' },
+    { chave: 'medida', rotulo: 'Medida (métrica)', tipo: 'opcao', opcoes: Object.keys(METRICA).map(k => [k, `${k} × ${METRICA[k][0]}`]), padrao: 'M4', mostrarSe: { rosca: ['metrica', 'lisa'] } },
+    { chave: 'soberba', rotulo: 'Diâmetro (soberba)', tipo: 'opcao', opcoes: Object.keys(SOBERBA).map(k => [k, k.replace('.', ',') + ' mm']), padrao: '4', mostrarSe: { rosca: 'soberba' } },
     { chave: 'comprimento', rotulo: 'Comprimento (abaixo da cabeça)', padrao: 16, min: 1 },
     { chave: 'roscado', rotulo: 'Comprimento roscado (0 = tudo)', padrao: 0, min: 0 },
     { chave: 'cabeca', rotulo: 'Cabeça', tipo: 'opcao', opcoes: [['sextavada', 'Sextavada'], ['cilindrica', 'Cilíndrica (Allen)'], ['panela', 'Panela'], ['chata', 'Chata (escareada)'], ['nenhuma', 'Sem cabeça (barra roscada)']], padrao: 'sextavada' },
@@ -56,7 +56,9 @@ export default {
   gerar(p, ctx) {
     const { Manifold, CrossSection, segmentos } = ctx;
     const metrica = p.rosca !== 'soberba';
-    const tab = METRICA[p.medida] ?? METRICA.M4;
+    const dSob = Number(p.soberba) || 4;
+    const proxima = Object.keys(METRICA).reduce((a, b) => Math.abs(Number(b.slice(1)) - dSob) < Math.abs(Number(a.slice(1)) - dSob) ? b : a);
+    const tab = metrica ? (METRICA[p.medida] ?? METRICA.M4) : METRICA[proxima];
     const d = (metrica ? Number(p.medida.slice(1)) : Number(p.soberba)) - p.folga;
     const passo = metrica ? tab[0] : SOBERBA[p.soberba] ?? 1.6;
     const R = d / 2, L = p.comprimento;
@@ -64,7 +66,7 @@ export default {
     const nPts = Math.max(32, Math.min(96, segmentos(R)));
     const partes = [];
     // ---- cabeça (para baixo, em z = 0 … k) ----
-    const D = { sextavada: tab[1], cilindrica: metrica ? tab[3] : 1.6 * d + 1, panela: 2 * d, chata: 2 * d, nenhuma: 0 }[p.cabeca] ?? 0;
+    const D = { sextavada: metrica ? tab[1] : Math.max(tab[1] * d / Number(proxima.slice(1)), d + 2), cilindrica: metrica ? tab[3] : 1.6 * d + 1, panela: 2 * d, chata: 2 * d, nenhuma: 0 }[p.cabeca] ?? 0;
     const k = { sextavada: metrica ? tab[2] : 0.7 * d, cilindrica: d, panela: 0.6 * d, chata: d / 2, nenhuma: 0 }[p.cabeca] ?? 0;
     let cab = null;
     if (p.cabeca === 'sextavada') {
@@ -94,7 +96,7 @@ export default {
       } else if (p.fenda === 'allen') {
         const a = (metrica ? tab[4] : 0.5 * d) + 0.1, ra = a / 2 / Math.cos(Math.PI / 6);
         const hx = new CrossSection([Array.from({ length: 6 }, (_, i) => [ra * Math.cos(i * Math.PI / 3), ra * Math.sin(i * Math.PI / 3)])], 'NonZero');
-        corte = hx.extrude(prof * 2, 0, 0, 1, true); hx.delete();
+        corte = hx.extrude(prof * 2).translate([0, 0, -prof]); hx.delete();
       }
       if (corte) { const n = cab.subtract(corte); cab.delete(); corte.delete(); cab = n; }
       partes.push(cab);

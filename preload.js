@@ -25,5 +25,6 @@ contextBridge.exposeInMainWorld('anvil', {
   definirIdioma: l => ipcRenderer.send('app:idioma', l),
   informarEstado: s => ipcRenderer.send('app:estado', s),
   aoSalvarEFechar: cb => ipcRenderer.on('app:salvarEFechar', cb),
+  perguntarSalvar: () => ipcRenderer.invoke('app:perguntarSalvar'),
   fecharAgora: () => ipcRenderer.send('app:fecharAgora'),
 });

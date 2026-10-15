@@ -1,0 +1,32 @@
+// seletor de cor: prévia ao vivo, Esc volta, clicar fora confirma
+const { app } = require('electron'); const fs = require('fs');
+for (const s of ['enable-unsafe-swiftshader', 'ignore-gpu-blocklist']) app.commandLine.appendSwitch(s);
+app.commandLine.appendSwitch('use-angle', 'swiftshader');
+app.on('browser-window-created', (_, w) => { w.webContents.on('console-message', e => { if (/rror/.test(e.message)) console.log('[console]', e.message); });
+  w.webContents.on('did-finish-load', async () => {
+  const espera = ms => new Promise(r => setTimeout(r, ms)), js = c => w.webContents.executeJavaScript(c);
+  for (let i = 0; i < 80 && !(await js(`document.querySelectorAll('.forma').length`)); i++) await espera(250);
+  await js(`[...document.querySelectorAll('.forma')].find(b=>b.querySelector('.nome-forma')?.textContent==='Caixa').click()`); await espera(400);
+  const est = () => js(`(()=>{const F=window.__anvil,o=F.estado.doc.objetos[0],m=F.malhas.get(o.id); return 'doc '+o.cor+' | vista #'+m.material.color.getHexString();})()`);
+  console.log('início:', await est());
+  const clicar = async (sel, fx, fy) => { const r = await js(`(()=>{const e=document.querySelector('${sel}').getBoundingClientRect(); return [Math.round(e.left+e.width*${fx}), Math.round(e.top+e.height*${fy})];})()`); w.webContents.sendInputEvent({ type: 'mouseMove', x: r[0], y: r[1] }); for (const t of ['mouseDown', 'mouseUp']) w.webContents.sendInputEvent({ type: t, x: r[0], y: r[1], button: 'left', clickCount: 1 }); await espera(150); };
+  await clicar('.amostra-cor', 0.5, 0.5); await espera(200);
+  console.log('seletor aberto:', await js(`!!document.querySelector('.seletor-cor')`));
+  await clicar('.seletor-cor .sc-quad', 0.9, 0.2); 
+  console.log('arrastando (prévia):', await est());
+  w.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); await espera(300);
+  console.log('Esc:', await est(), '| seletor fechado:', await js(`!document.querySelector('.seletor-cor')`), '| seleção mantida:', await js(`window.__anvil.estado.sel.length`));
+  await clicar('.amostra-cor', 0.5, 0.5); await espera(200);
+  await js(`[...document.querySelectorAll('.sc-paleta button')][4].click()`); await espera(200);
+  console.log('paleta (prévia):', await est());
+  await clicar('#painel h2, #propriedades h2', 0.5, 0.5); await espera(400);
+  console.log('clicou fora:', await est(), '| seletor fechado:', await js(`!document.querySelector('.seletor-cor')`));
+  await clicar('.amostra-cor', 0.5, 0.5); await espera(200);
+  await js(`[...document.querySelectorAll('.sc-paleta button')][0].click()`); await espera(200);
+  w.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Return' }); await espera(400);
+  console.log('Enter:', await est());
+  w.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Z', modifiers: ['control'] }); await espera(400);
+  console.log('Ctrl+Z:', await est());
+  app.exit(0);
+}); });
+require('../main.js');
