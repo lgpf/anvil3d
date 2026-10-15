@@ -1,0 +1,42 @@
+<!doctype html><html><head><meta charset="utf-8">
+<script type="importmap">{ "imports": { "three": "../../node_modules/three/build/three.module.js", "three/addons/": "../../node_modules/three/examples/jsm/" } }</script>
+<style>html,body{margin:0;background:transparent}</style></head><body>
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+window.renderizar = (dados, tam) => {
+  const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+  r.setSize(tam, tam); r.setClearColor(0x000000, 0);
+  r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 0.95;
+  document.body.appendChild(r.domElement);
+  const cena = new THREE.Scene();
+  const pm = new THREE.PMREMGenerator(r);
+  cena.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+  let g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(dados.pos, 3));
+  g.setIndex(dados.idx); g = g.toNonIndexed(); g.computeVertexNormals();
+  // ferro escuro com leve tom azulado, como a referência
+  const mat = new THREE.MeshStandardMaterial({ color: 0x505862, metalness: 0.8, roughness: 0.42, flatShading: true });
+  const m = new THREE.Mesh(g, mat); cena.add(m);
+  // arestas claras de desgaste
+  const ar = new THREE.LineSegments(new THREE.EdgesGeometry(g, 25), new THREE.LineBasicMaterial({ color: 0xc9d2da, transparent: true, opacity: 0.55 }));
+  cena.add(ar);
+  const luz = new THREE.DirectionalLight(0xfff1e0, 2.2); luz.position.set(-60, -90, 160); cena.add(luz);
+  const luz2 = new THREE.DirectionalLight(0x9fc4ff, 0.9); luz2.position.set(120, 80, 40); cena.add(luz2);
+  // ferrugem discreta: luz quente rasante por baixo
+  const luz3 = new THREE.DirectionalLight(0xc0602a, 0.35); luz3.position.set(40, -120, -20); cena.add(luz3);
+  const cam = new THREE.PerspectiveCamera(26, 1, 1, 2000);
+  cam.up.set(0, 0, 1);
+  cam.position.set(-210, -190, 200);
+  const bb = new THREE.Box3().setFromObject(m), c = bb.getCenter(new THREE.Vector3());
+  cam.lookAt(c);
+  // enquadra com margem: ajusta a distância até caber
+  const s = new THREE.Sphere(); bb.getBoundingSphere(s);
+  const dir = cam.position.clone().sub(c).normalize();
+  cam.position.copy(c).add(dir.multiplyScalar(s.radius / Math.sin(13 * Math.PI / 180) * 0.86));
+  cam.lookAt(c);
+  r.render(cena, cam);
+  return r.domElement.toDataURL('image/png');
+};
+window.pronto = true;
+</script></body></html>

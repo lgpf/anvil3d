@@ -1,0 +1,22 @@
+const { app } = require('electron');
+for (const s of ['enable-unsafe-swiftshader', 'ignore-gpu-blocklist']) app.commandLine.appendSwitch(s);
+app.commandLine.appendSwitch('use-angle', 'swiftshader');
+app.on('browser-window-created', (_, w) => { w.webContents.on('did-finish-load', async () => {
+  const espera = ms => new Promise(r => setTimeout(r, ms)), js = c => w.webContents.executeJavaScript(c);
+  for (let i = 0; i < 80 && !(await js(`document.querySelectorAll('.forma').length`)); i++) await espera(250);
+  await js(`localStorage.setItem('teste:origem','1')`); await js(`window.__anvil.alcasLaterais(true)`);
+  const cotas = () => js(`[...document.querySelectorAll('#cotas .cota')].map(c=>c.textContent).join(' / ') || '(nenhuma)'`);
+  await js(`[...document.querySelectorAll('.forma')].find(b=>b.querySelector('.nome-forma')?.textContent==='Caixa').click()`); await espera(300);
+  await js(`document.querySelector('[data-cmd=ajustar]').click()`); await espera(400);
+  console.log('só selecionada:', await cotas());
+  const p = await js(`(()=>{const F=window.__anvil; const g=F.cena.children.find(g=>g.children?.[0]?.userData?.alca); const h=g.children.find(h=>h.userData.alca==='z+'); const q=h.position.clone().project(F.camera); const r=document.querySelector('#vista canvas').getBoundingClientRect(); return [r.left+(q.x+1)/2*r.width, r.top+(1-q.y)/2*r.height];})()`);
+  w.webContents.sendInputEvent({ type: 'mouseMove', x: Math.round(p[0]) + 30, y: Math.round(p[1]) + 30 }); await espera(150);
+  w.webContents.sendInputEvent({ type: 'mouseMove', x: Math.round(p[0]), y: Math.round(p[1]) }); await espera(300);
+  console.log('mouse na alça de cima:', await cotas());
+  w.webContents.sendInputEvent({ type: 'mouseMove', x: Math.round(p[0]) - 200, y: Math.round(p[1]) + 200 }); await espera(500);
+  console.log('logo depois de sair:', await cotas());
+  await espera(2000);
+  console.log('2 s depois:', await cotas());
+  app.exit(0);
+}); });
+require('../main.js');

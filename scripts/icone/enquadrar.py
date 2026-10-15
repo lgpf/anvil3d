@@ -1,0 +1,11 @@
+# Recorta, centraliza e gera os tamanhos do ícone (PNG e ICO para o Windows)
+from PIL import Image
+im = Image.open('build/icone-1024.png').convert('RGBA')
+im = im.crop(im.getbbox()); w, h = im.size; s = int(max(w, h) * 1.06)
+out = Image.new('RGBA', (s, s), (0, 0, 0, 0)); out.paste(im, ((s - w) // 2, (s - h) // 2))
+out = out.resize((1024, 1024), Image.LANCZOS)
+out.save('build/icone.png')
+out.resize((256, 256), Image.LANCZOS).save('build/icon.png')
+out.save('build/icon.ico', sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+out.resize((256, 256), Image.LANCZOS).save('app/icone.png')
+print('ok')

@@ -1,0 +1,23 @@
+# dependências e saídas de compilação
+node_modules/
+dist/
+app/vendor/
+out/
+*.tmp
+*.log
+
+# executáveis e pacotes gerados
+*.exe
+*.zip
+*.7z
+*.blockmap
+
+# sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# editores
+.vscode/
+.idea/
+*.swp

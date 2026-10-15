@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' app:; style-src 'self' app: 'unsafe-inline'; img-src 'self' app: data:">
+<title>Manual do Anvil3D</title>
+<style>
+  :root { --aco: #dde2e3; --aco-claro: #eef1f1; --linha: #b8c1c4; --tinta: #1e2a30; --suave: #56656c; --azul: #2f6f8f; --latao: #e0a100;
+    font-family: Bahnschrift, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--tinta); font-size: 14px; }
+  * { box-sizing: border-box; }
+  body { margin: 0; display: grid; grid-template-columns: 230px 1fr; height: 100vh; }
+  nav { background: var(--aco); border-right: 1px solid var(--linha); overflow-y: auto; padding: 14px 10px; }
+  nav h1 { font-size: 17px; margin: 0 0 10px 6px; }
+  nav a { display: block; padding: 4px 6px; color: var(--tinta); text-decoration: none; border-radius: 4px; }
+  nav a:hover { background: var(--aco-claro); }
+  main { overflow-y: auto; padding: 18px 36px 80px; background: #fff; }
+  section { max-width: 720px; scroll-margin-top: 12px; }
+  h2 { font-size: 20px; margin: 30px 0 8px; padding-bottom: 4px; border-bottom: 2px solid var(--latao); display: inline-block; }
+  section:first-child h2 { margin-top: 4px; }
+  h3 { font-size: 15px; margin: 18px 0 4px; }
+  p, li { line-height: 1.55; }
+  ul, ol { padding-left: 22px; }
+  kbd { font-family: inherit; font-size: 12px; background: var(--aco-claro); border: 1px solid var(--linha); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; white-space: nowrap; }
+  .nota { background: #fff4d6; border: 1px solid #ecd08a; border-radius: 4px; padding: 8px 12px; margin: 10px 0; }
+  table { border-collapse: collapse; margin: 8px 0; }
+  td, th { border-bottom: 1px solid var(--aco); padding: 5px 14px 5px 0; text-align: left; vertical-align: top; }
+  th { color: var(--suave); font-weight: 600; }
+  code, pre { font-family: Consolas, monospace; font-size: 12.5px; background: var(--aco-claro); border-radius: 4px; }
+  code { padding: 0 4px; }
+  .assinatura { max-width: 720px; margin-top: 40px; padding-top: 10px; border-top: 1px solid var(--aco); color: var(--suave); font-size: 12.5px; }
+  .assinatura a { color: var(--azul); }
+  pre { padding: 10px 12px; overflow-x: auto; }
+  .cor { display: inline-block; width: 11px; height: 11px; border-radius: 2px; vertical-align: -1px; margin-right: 3px; }
+</style>
+</head>
+<body>
+<nav>
+  <h1>Manual</h1>
+  <a href="#inicio">Primeiros passos</a>
+  <a href="#navegacao">Navegar na vista 3D</a>
+  <a href="#formas">Formas e biblioteca</a>
+  <a href="#selecao">Selecionar</a>
+  <a href="#mover">Mover e posicionar</a>
+  <a href="#tamanho">Tamanho e escala</a>
+  <a href="#girar">Girar e pivô</a>
+  <a href="#facemesa">Face na mesa</a>
+  <a href="#espelhar">Espelhar</a>
+  <a href="#furo">Sólido e furo</a>
+  <a href="#grupo">Agrupar e desagrupar</a>
+  <a href="#projetar">Projetar e SVG</a>
+  <a href="#exportar">Exportar</a>
+  <a href="#preferencias">Preferências</a>
+  <a href="#operacoes">Operações</a>
+  <a href="#variosobjetos">Várias peças</a>
+  <a href="#espelharmodo">Espelhar</a>
+  <a href="#alinhar">Alinhar</a>
+  <a href="#selarea">Seleção por área</a>
+  <a href="#consolidar">Consolidar e biblioteca</a>
+  <a href="#juntar">Juntar faces</a>
+  <a href="#arestas">Fillet e chanfro</a>
+  <a href="#malha">Malha: triângulos e vértices</a>
+  <a href="#simplificar">Simplificar malhas</a>
+  <a href="#reparo">Reparar para impressão</a>
+  <a href="#arquivos">Arquivos, salvar e exportar</a>
+  <a href="#historico">Desfazer e segurança</a>
+  <a href="#ajustes">Ajustes da barra de status</a>
+  <a href="#idioma">Idioma</a>
+  <a href="#atalhos">Atalhos de teclado</a>
+  <a href="#plugins">Criar plugins</a>
+  <a href="#problemas">Solução de problemas</a>
+</nav>
+<main>
+
+<section id="inicio">
+  <h2>Primeiros passos</h2>
+  <p>O Anvil3D é um CAD local no estilo do Tinkercad: você monta peças juntando formas sólidas e formas de furo. A diferença principal é que o projeto (<code>.nvl3d</code>) guarda a <b>receita completa</b> da peça. Você pode reabrir, desagrupar e mudar qualquer medida anos depois. O STL é só uma exportação.</p>
+  <ol>
+    <li>Clique numa forma da lista à esquerda (por exemplo, <b>Caixa</b>): ela aparece no centro da mesa. Ou clique, segure e <b>arraste</b> a forma até a vista: a própria peça segue o mouse, translúcida, sobre a mesa, e fica onde você soltar, apoiada em Z = 0 (respeitando o passo de movimento).</li>
+    <li>Ajuste medidas no painel da direita, em <b>Parâmetros</b>.</li>
+    <li>Arraste pelas setas coloridas para mover.</li>
+    <li>Transforme outra forma em <b>Furo</b>, selecione as duas e clique em <b>Agrupar</b>: o furo é subtraído.</li>
+    <li><b>Salvar</b> grava o projeto; <b>Exportar STL</b> gera o arquivo para o fatiador.</li>
+  </ol>
+  <p>A barra de cima tem os menus <b>Arquivo</b>, <b>Editar</b>, <b>Objeto</b>, <b>Vista</b> e <b>Ajuda</b>, com todos os comandos e atalhos, e à direita os botões mais usados: desfazer/refazer, mover/girar, juntar faces, face na mesa, agrupar, sólido/furo e exportar.</p>
+  <p>Em quase todo o painel há um pequeno <b>?</b> ao lado dos títulos com uma dica rápida daquela parte. <kbd>F1</kbd> abre este manual.</p>
+</section>
+
+<section id="navegacao">
+  <h2>Navegar na vista 3D</h2>
+  <table>
+    <tr><th>Ação</th><th>Como</th></tr>
+    <tr><td>Girar a vista</td><td>Arrastar com o botão <b>direito</b></td></tr>
+    <tr><td>Arrastar a vista</td><td>Arrastar com o botão do <b>meio</b></td></tr>
+    <tr><td>Zoom</td><td>Roda do mouse</td></tr>
+    <tr><td>Enquadrar tudo</td><td><kbd>F</kbd> ou botão Enquadrar</td></tr>
+    <tr><td>Vista isométrica</td><td><kbd>Home</kbd> ou botão Iso</td></tr>
+    <tr><td>Topo, frente, direita</td><td>Botões na barra</td></tr>
+  </table>
+  <p>O plano de trabalho é a <b>mesa de impressão</b>: a origem (0, 0, 0) fica na <b>quina da frente à esquerda</b>, onde estão as setas X (vermelha), Y (verde) e Z (azul), e a mesa vai para +X e +Y, como numa impressora 3D. Peças novas nascem no centro da mesa. O tamanho da mesa se escolhe em <b>Preferências › Mesa</b> (200, 220, 256 ou 300 mm) e fica guardado. As vistas prontas (isométrica, topo, frente, direita) mostram a mesa inteira, com a origem embaixo à esquerda; <kbd>F</kbd> enquadra só as peças.</p>
+  <p>O botão <b>Triângulos</b> (<kbd>T</kbd>) mostra a malha de todas as peças. A barra de status mostra o total de triângulos da cena.</p>
+</section>
+
+<section id="formas">
+  <h2>Formas e biblioteca</h2>
+  <p>A lista à esquerda mostra todas as formas disponíveis, agrupadas por categoria:</p>
+  <ul>
+    <li><b>Básicos</b>: Caixa, Cilindro, Cone, Cunha, Esfera, Pirâmide, Toroide e Tubo.</li>
+    <li><b>Geradores</b>: Engrenagem, Extrusão de polígono (com torção e escala do topo) e Revolução de Perfil.</li>
+    <li><b>Meus plugins</b>: formas que você mesmo criou (ícone amarelo).</li>
+  </ul>
+  <p>Toda forma nasce centrada em X/Y e apoiada em Z = 0. Os parâmetros ficam no painel da direita e podem ser alterados a qualquer momento.</p>
+  <h3>Caixa e cilindro com bordas arredondadas</h3>
+  <p>A <b>Caixa</b> tem a opção <b>Arredondar</b> (só verticais, verticais e topo, ou todas as arestas) com um <b>Raio</b>. O <b>Cilindro</b> tem fillet ou chanfro independente na borda de cima e na de baixo. Esses arredondamentos são exatos e mais leves que a ferramenta geral de arestas.</p>
+  <p>As miniaturas da lista usam a cor de cada forma, que também é a cor das peças novas; plugins podem definir a sua com <code>cor</code>.</p>
+  <h3>A biblioteca de formas</h3>
+  <p>As formas ficam em categorias, como no Tinkercad: <b>Básicos</b>, <b>Poliedros</b> (os 5 platônicos; os arquimedianos: tetraedro, cubo, octaedro, dodecaedro e icosaedro truncados, cuboctaedro, rombicuboctaedro, cuboctaedro truncado, cubo achatado, icosidodecaedro, rombicosidodecaedro, icosidodecaedro truncado e a <b>bola de futebol</b>; o dodecaedro e o triacontaedro rômbicos; a estrela octângula; a esfera geodésica com frequência ajustável; bipirâmide e antiprisma de N lados — cada um apoiado numa face), <b>Símbolos</b> (coração, seta, raio, cruz, lua, gota), <b>Fixadores</b> (parafuso, porca, arruela), <b>Mecânica</b> (engrenagem, cremalheira de mesmo módulo, polia com canal em V ou redondo, mola), <b>Encaixes</b> (pino, rabo de andorinha, cantoneira em L, gancho e a <b>junta esférica</b>: a <b>bola</b> com pescoço — base em disco, sem base ou bola dupla — e o <b>soquete</b> de pressão, com boca mais estreita que a bola e cortes para flexionar; use o mesmo diâmetro de bola nos dois), <b>Recipientes</b> (caixa oca, tampa que encaixa nela, pote), <b>Geradores</b> (extrusão, revolução de perfil e <b>tubo curvo</b>: perfis de tubo e de furo em círculo, quadrado ou hexágono, ou maciço, largura, parede, raio e ângulo da curva e trechos retos de entrada e saída), além dos seus plugins e das suas peças. Clique no nome de uma categoria para fechá-la ou abri-la (ao abrir o programa, só os Básicos vêm abertos), e use <b>Buscar forma…</b> no topo para achar pelo nome (<kbd>Esc</kbd> limpa). Formas como pino e rabo de andorinha têm <b>Folga</b>, para usar a mesma peça como furo do encaixe.</p>
+  <h3>Paraboloide, Meia esfera e Meio cilindro</h3>
+  <p><b>Paraboloide</b>: cúpula de perfil parabólico (pode virar de ponta-cabeça, como tigela). <b>Meia esfera</b>: a metade de cima de uma esfera, com altura ajustável (achatada ou alongada). <b>Meio cilindro</b>: semicírculo extrudado, como <b>telhado redondo</b> (curva para cima) ou <b>meio disco</b> deitado (forma de D).</p>
+  <h3>Fixadores: Parafuso e Porca</h3>
+  <p><b>Parafuso</b> com rosca de verdade (hélice): <b>métrica ISO</b> de passo normal (M2 a M12), <b>soberba</b> (madeira, passo largo e ponta fina) ou <b>lisa</b>. Cabeça <b>sextavada</b>, <b>cilíndrica</b> (tipo Allen), <b>panela</b>, <b>chata</b> (escareada, 90°) ou sem cabeça (barra roscada); fenda <b>simples</b>, <b>Phillips</b> ou <b>Allen</b>. Dá para deixar só uma parte roscada. O parafuso sai com a cabeça para baixo, a melhor posição para imprimir.</p>
+  <p><b>Porca</b> sextavada com rosca interna métrica, chanfrada dos dois lados, altura padrão ou personalizada.</p>
+  <p><b>Folga de impressão</b>: impressoras costumam engordar as peças um pouco. Para o parafuso, a folga diminui o diâmetro; para a porca, aumenta o furo. Comece com 0,2 mm na porca e ajuste conforme a sua impressora. Roscas abaixo de M4 são difíceis de imprimir em FDM.</p>
+  <h3>Polígono, Estrela e Texto</h3>
+  <p><b>Polígono</b>: prisma de N lados (triângulo, hexágono…), medido pelos cantos (diâmetro externo) ou entre lados opostos (medida de chave, como numa porca), com giro e <b>torção</b> opcionais (o topo gira em relação à base).</p>
+  <p><b>Estrela</b>: N pontas iguais; com diâmetro interno 0 ela sai "perfeita" (no caso de 5 pontas, o pentagrama, com as arestas de pontas opostas alinhadas). Formato <b>plano</b>, <b>cônico</b> (as faces sobem até um bico no centro; dá para deixar uma base reta) ou <b>cônico dos dois lados</b>, também com <b>torção</b> opcional.</p>
+  <p><b>Texto</b>: escreva o texto (Enter quebra a linha), escolha a fonte — as do Anvil3D ou qualquer uma instalada no Windows —, a altura das letras (altura das maiúsculas, em mm) e a espessura. A forma pode ser <b>plana</b> (deitada na mesa), <b>em pé</b> ou <b>em volta de um cilindro</b>: informe o raio do cilindro e o sentido. <b>Para fora</b> faz letras em relevo; <b>para dentro</b> faz as letras entrando no cilindro na profundidade escolhida — marque o texto como <b>Furo</b>, coloque-o no mesmo centro (X e Y) do cilindro, na altura desejada, e agrupe para gravar. O texto fica centrado na frente (lado −Y).</p>
+  <h3>Revolução de Perfil</h3>
+  <p><b>✎ Desenhar perfil…</b> abre um editor 2D com o eixo de giro (linha azul tracejada): com <b>Reta</b> você clica cantos, com <b>Curva</b> pontos suaves, com <b>Livre</b> arrasta para desenhar; em qualquer ferramenta dá para arrastar pontos, duplo clique troca canto/suave e botão direito ou <kbd>Del</kbd> apaga. A grade encaixa os pontos (livre a 5 mm), a roda dá zoom e o botão do meio move a vista. O perfil fica sempre do lado direito do eixo e pode ser desenhado em qualquer sentido (horário ou anti-horário); se ficar sem área (pontos em linha ou sobre o eixo), a peça mostra o erro em vez de sumir. O desenho fica guardado no objeto e pode ser reaberto e alterado enquanto a peça for uma Revolução de Perfil (antes de converter em malha ou consolidar). A <b>Extrusão de polígono</b> tem o mesmo editor, sem eixo.</p>
+  <p>Também dá para escrever o perfil à mão: um ponto por linha no formato <code>r, z</code>: <code>r</code> é a distância ao eixo e <code>z</code> é a altura. Ângulo inicial e ângulo varrido aceitam uma casa decimal. Para usar outro eixo, gire o objeto depois com o pivô que quiser.</p>
+  <h3>Campos numéricos</h3>
+  <p>Aceitam vírgula ou ponto e contas simples: <code>45/2</code>, <code>10+3,5</code>, <code>(20-4)*2</code>. <kbd>Enter</kbd> confirma e <kbd>Esc</kbd> desfaz a digitação.</p>
+</section>
+
+<section id="selecao">
+  <h2>Selecionar</h2>
+  <ul>
+    <li>Clique num objeto para selecioná-lo; clique no vazio para limpar.</li>
+    <li><kbd>Shift</kbd>+clique ou <kbd>Ctrl</kbd>+clique soma ou tira da seleção.</li>
+    <li><kbd>Ctrl</kbd>+<kbd>A</kbd> seleciona tudo; <kbd>Esc</kbd> limpa.</li>
+  </ul>
+  <p>Objetos selecionados ficam com contorno amarelo. Um objeto em vermelho aramado tem erro (por exemplo, um plugin que não está instalado); a mensagem aparece no painel.</p>
+</section>
+
+<section id="mover">
+  <h2>Mover e posicionar</h2>
+  <p>Enquanto você arrasta pelo gizmo, aparecem <b>cotas de deslocamento</b>: linhas de cota a partir da posição de partida (marcada com uma cruz), só nos eixos em que a peça andou, com o valor de cada uma (X vermelho, Y verde, Z azul).</p>
+  <p>Arraste pelas setas do gizmo (vermelha X, verde Y, azul Z) ou pelos quadradinhos para mover em dois eixos. O movimento respeita o <b>Passo de movimento</b> da barra de status. Com vários objetos selecionados, todos andam juntos.</p>
+  <p>Pelo teclado: setas movem em X e Y; <kbd>Ctrl</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> movem em Z, sempre um passo por vez.</p>
+  <p>Em <b>Posição da origem</b> você digita as coordenadas exatas. A origem de uma forma é o centro da base. A de um grupo é o centro da base da caixa que envolvia as peças quando o grupo foi criado.</p>
+  <p><b>Pousar no plano</b> desce ou sobe o objeto até que o ponto mais baixo fique em Z = 0.</p>
+</section>
+
+<section id="tamanho">
+  <h2>Tamanho e escala</h2>
+  <p><b>Na própria peça:</b> o objeto selecionado mostra alças brancas. As alças ficam nos cantos e no topo; as dos meios das laterais podem ser ligadas em <b>Preferências › Alças nos meios das laterais</b>. Ao <b>apontar o mouse para uma alça</b> (ou arrastá-la), aparece a cota da medida que ela muda — a alça de cima mostra a altura, as dos lados a largura ou a profundidade, as dos cantos as duas. A cota fica na tela depois que o mouse sai da alça, até você girar a vista, trocar a seleção ou clicar em outro lugar, para dar tempo de clicar nela; com <kbd>Shift</kbd> aparecem as três. Ao girar a vista, as cotas somem.</p>
+  <ul>
+    <li>Alças no meio das arestas de baixo mudam só aquela medida (X ou Y); as dos cantos mudam X e Y juntas; a de cima muda a altura. Com <kbd>Shift</kbd> apertado, qualquer alça muda as <b>três medidas na mesma proporção</b> e fica <b>azul</b> para deixar isso claro.</li>
+    <li>O lado oposto à alça fica parado; a medida respeita o passo de movimento e aparece na barra de status enquanto você arrasta.</li>
+    <li>Clique numa cota para digitar a medida exata (aceita contas como <code>45/2</code>); <kbd>Enter</kbd> aplica, <kbd>Esc</kbd> cancela. Com <kbd>Shift</kbd> as cotas ficam azuis: clicando numa delas assim, a medida digitada muda as três na mesma proporção.</li>
+  </ul>
+  <p>Em <b>Tamanho</b> você vê e digita as medidas nos eixos do próprio objeto. Mudar o tamanho aplica uma escala; <b>Escala 100%</b> volta ao tamanho dos parâmetros.</p>
+  <div class="nota">Sempre que possível, prefira mudar as medidas pelos <b>Parâmetros</b>: assim furos, raios e chanfros mantêm a medida certa. A escala deforma tudo junto; um furo redondo vira oval se a escala for diferente em X e Y.</div>
+</section>
+
+<section id="girar">
+  <h2>Girar e pivô</h2>
+  <h3>Girar pelo gizmo</h3>
+  <p>Clique de novo na peça já selecionada (ou aperte <kbd>R</kbd>, ou o botão <b>✥ Mover / ⟳ Girar</b>) para trocar as setas pelos <b>anéis de giro</b>; clique outra vez para voltar a mover. Durante o giro, a etiqueta mostra o ângulo do anel usado (por exemplo, <b>Z +34,4°</b>); no giro livre (esfera ou anel de tela) mostra os três: <b>X, Y e Z</b>. Os anéis ficam em volta da peça, com tamanho limitado em peças grandes, no <b>pivô escolhido no painel</b> (padrão: <b>centro da caixa</b> da peça; o marcador amarelo mostra onde) e arrastar um anel gira a peça em torno dele; o giro respeita o <b>Passo de giro</b> da barra de status e a etiqueta acima da peça mostra o ângulo. Com várias peças selecionadas, todas giram juntas.</p>
+  <h3>Rotação absoluta</h3>
+  <p>Mostra e define os ângulos X, Y e Z (uma casa decimal) em torno da origem do objeto.</p>
+  <h3>Girar em torno de um ponto</h3>
+  <p>Escolha o <b>Pivô</b>, o <b>Eixo</b> e o <b>Ângulo</b>, e clique em <b>Girar +</b> (anti-horário pela regra da mão direita) ou <b>Girar −</b>. O marcador amarelo na vista mostra onde está o pivô.</p>
+  <table>
+    <tr><th>Pivô</th><th>Onde fica</th></tr>
+    <tr><td>Centro da caixa</td><td>Centro da caixa que envolve a seleção</td></tr>
+    <tr><td>Centro da base</td><td>Centro, na altura mais baixa</td></tr>
+    <tr><td>Canto mínimo</td><td>Canto com menores X, Y e Z</td></tr>
+    <tr><td>Origem do objeto</td><td>A origem do último objeto selecionado</td></tr>
+    <tr><td>Ponto escolhido</td><td>Coordenadas digitadas, ou <b>Escolher no modelo</b>: clique na peça e ele encaixa no vértice mais próximo (até 2 mm)</td></tr>
+  </table>
+  <p>Com vários objetos selecionados, todos giram juntos em torno do mesmo pivô.</p>
+</section>
+
+<section id="facemesa">
+  <h2>Face na mesa</h2>
+  <p>Para apoiar a peça no plano por uma face específica (a mais larga, para imprimir sem suporte, por exemplo): selecione a peça, clique em <b>Face na mesa</b> (ou <kbd>B</kbd>), passe o mouse sobre ela (a face acende em amarelo) e clique na face escolhida. A peça gira para essa face ficar virada para baixo e desce até encostar em Z = 0. Com várias peças selecionadas, todas giram e descem juntas. <kbd>Esc</kbd> cancela.</p>
+</section>
+
+<section id="espelhar">
+  <h2>Espelhar</h2>
+  <p><b>Espelhar X/Y/Z</b> inverte a seleção em relação ao centro dela. O objeto continua editável; os parâmetros não mudam.</p>
+</section>
+
+<section id="furo">
+  <h2>Sólido e furo</h2>
+  <p>Todo objeto é <b>Sólido</b> ou <b>Furo</b> (tecla <kbd>H</kbd> alterna). Furos aparecem cinza e translúcidos e só cortam quando agrupados com sólidos. Enquanto não estão agrupados, a parte de um sólido que um furo invade aparece numa versão <b>mais escura</b> da cor do sólido, mostrando o que vai ser cortado. Um furo solto no plano não vai para o STL.</p>
+</section>
+
+<section id="grupo">
+  <h2>Agrupar e desagrupar</h2>
+  <p>Selecione dois ou mais objetos e use <b>Agrupar</b> (<kbd>Ctrl</kbd>+<kbd>G</kbd>): os sólidos se unem e os furos são subtraídos. Um grupo pode ser sólido ou furo e pode entrar em outro grupo.</p>
+  <p><b>Desagrupar</b> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd>) devolve as peças originais, com suas posições e parâmetros. É o que faz o Anvil3D diferente de trabalhar só com STL.</p>
+  <p>O grupo é <b>multicolorido</b>: cada parte mantém a cor da peça de onde veio, e as superfícies cortadas por furos ficam com a cor da primeira peça sólida. Escolher uma cor para o grupo pinta tudo de uma cor só; a caixa <b>Multicolorido</b> volta às cores das peças.</p>
+  <h3>Opacidade</h3>
+  <p>Todo objeto sólido tem a barra <b>Opacidade</b> no painel, para deixá-lo transparente na cor escolhida e enxergar o que está dentro ou atrás. É só visual: não muda o STL.</p>
+</section>
+
+<section id="projetar">
+  <h2>Projetar na superfície e importar SVG</h2>
+  <p><b>Projetar na superfície</b> (<b>Objeto › Projetar na superfície</b> ou o botão no painel com duas peças selecionadas): selecione primeiro a peça a aplicar — um texto, um logotipo, uma placa fina — e depois, com <kbd>Shift</kbd>+clique, a peça de destino. Posicione a peça de frente para a superfície (por exemplo, um texto plano acima de uma cúpula, ou um texto em pé na frente de uma peça curva). Ela é "decalcada" na direção da sua espessura e acompanha as curvas e irregularidades da superfície, mantendo a espessura. Se a peça for <b>sólida</b>, vira relevo (entra um pouquinho na superfície para colar); se for <b>furo</b>, vira gravação. Depois é só agrupar com o destino. O resultado é uma malha que guarda a peça original: <b>Voltar à receita</b> desfaz a projeção.</p>
+  <p><b>Aplicar na face…</b> (<b>Objeto › Aplicar na face…</b>) faz isso de um jeito mais direto, inclusive em <b>superfícies inclinadas</b> (uma rampa, a lateral de uma peça girada, uma cúpula): selecione só a peça a aplicar — por exemplo, um texto plano feito na mesa — e clique no ponto da outra peça onde ela deve ficar. A peça é deitada na face clicada, centrada no ponto, e fica <b>legível de onde você está olhando</b> (gire a vista antes, se quiser o texto em outra direção). Ela é "decalcada" mantendo o tamanho ao longo das curvas — o texto dobra sobre uma esfera ou um meio cilindro em vez de esticar — e as letras ficam em pé sobre a superfície em cada ponto, como relevo (sólido) ou gravação (furo). <kbd>Esc</kbd> cancela.</p>
+  <p><b>Arquivo › Importar SVG…</b> traz um desenho vetorial (de Inkscape, Illustrator, sites de ícones) como uma peça extrudada: caminhos, retângulos, círculos, elipses e polígonos, com as transformações aplicadas. Contornos dentro de contornos viram furos (como o miolo de um "O"), ou marque <b>Preencher os furos</b>. No painel dá para mudar a <b>largura</b> (a altura do desenho acompanha), a <b>altura</b> da extrusão e <b>espelhar</b>. Textos do SVG precisam ser convertidos em caminhos no programa de desenho antes (no Inkscape: Caminho › Objeto para caminho).</p>
+</section>
+
+<section id="exportar">
+  <h2>Exportar STL e Exportar STL por objeto</h2>
+  <p><b>Exportar STL</b> junta tudo o que está no projeto (ou só a seleção) num <b>arquivo único</b>, com os furos já aplicados: é o que se usa na maioria das impressões. <b>Exportar STL por objeto…</b> grava <b>um arquivo para cada objeto</b>, todos com a mesma origem da mesa: abrindo todos juntos no fatiador (Cura, PrusaSlicer, Bambu Studio), as peças ficam remontadas no lugar certo, e você pode dar uma cor, um filamento ou uma configuração diferente para cada uma (impressão multicolorida ou com materiais diferentes).</p>
+</section>
+
+<section id="preferencias">
+  <h2>Preferências</h2>
+  <p>O menu <b>Preferências</b> guarda escolhas que valem para todos os projetos:</p>
+  <ul>
+    <li><b>Mover arrastando a peça</b> (ligado por padrão): como no Tinkercad, basta <b>arrastar a peça</b> com o botão esquerdo para deslizá-la sobre o plano em que ela está (X e Y), e a <b>seta preta no topo</b> sobe e desce (Z). O passo de movimento da barra de baixo vale para os dois. Arrastar uma peça que não está selecionada já a seleciona e move. Com essa opção ligada, o gizmo de setas coloridas não aparece. <b>Desligada</b>, a peça só se move pelo gizmo.</li>
+    <li><b>Alças nos meios das laterais</b>: mostra também as alças de redimensionar no meio de cada lado (por padrão, só os cantos e o topo).</li>
+    <li><b>Tamanho da mesa</b>: 200, 220, 256 ou 300 mm.</li>
+    <li><b>Idioma</b>: Português ou English (o programa inteiro e o manual mudam na hora).</li>
+  </ul>
+</section>
+
+<section id="operacoes">
+  <h2>Operações em andamento</h2>
+  <p>Só uma operação fica aberta por vez (alinhar, espelhar, juntar faces, face na mesa, fillet/chanfro, edição de malha, escolher ponto). Entrar em outra conclui a anterior: as que já aplicam na hora (alinhar, espelhar) só são fechadas; as que esperam confirmação (fillet, juntar faces, face na mesa) são canceladas. Também concluem a operação: clicar fora da peça e fora dos pontos de controle, apertar <kbd>Esc</kbd> ou usar outro comando da barra. Se a peça da operação deixar de existir (apagada ou desfeita), a operação é cancelada, sem deixar setas ou pontos para trás.</p>
+</section>
+
+<section id="variosobjetos">
+  <h2>Várias peças de uma vez</h2>
+  <p>Com mais de uma peça selecionada (<kbd>Shift</kbd>+clique, seleção por área ou <kbd>Ctrl</kbd>+<kbd>A</kbd>), quase tudo vale para o conjunto: mover e girar pelo gizmo, cor, sólido/furo, opacidade, girar em torno de um ponto, espelhar, alinhar, pousar no plano e também <b>mudar o tamanho</b>. As <b>alças brancas</b> e as <b>cotas</b> aparecem em volta da seleção inteira, como se fosse uma peça só (<kbd>Shift</kbd> mantém a proporção), e o painel mostra a <b>posição</b> e o <b>tamanho da seleção</b>, com a opção de manter a proporção e um campo de <b>escala em %</b>. As peças crescem juntas, mantendo as distâncias proporcionais entre elas. Se houver peças giradas em ângulos que não são múltiplos de 90°, a escala é aplicada igual nos três eixos, para não deformá-las.</p>
+</section>
+
+<section id="espelharmodo">
+  <h2>Espelhar</h2>
+  <p>Com uma ou mais peças selecionadas, use <b>Espelhar</b> (<kbd>M</kbd>, botão na barra ou <b>Objeto › Espelhar</b>). Aparecem três <b>setas duplas</b> em volta da seleção: <b>vermelha</b> para X, <b>verde</b> para Y e <b>azul</b> para Z. Passando o mouse, a seta fica amarela; clicando, a seleção é invertida naquele eixo, em volta do próprio centro. O painel tem os mesmos três botões. Dá para espelhar várias vezes; <b>Concluir</b> ou <kbd>Esc</kbd> sai.</p>
+</section>
+
+<section id="alinhar">
+  <h2>Alinhar</h2>
+  <p>Selecione dois ou mais objetos e use <b>Alinhar</b> (<kbd>L</kbd>, botão na barra ou no painel). Aparecem <b>pontos pretos</b> em volta da seleção, como no Tinkercad: três na frente (esquerda, centro, direita, em X), três do lado direito (frente, centro, trás, em Y) e três numa haste vertical (base, meio, topo, em Z). Passando o mouse num ponto, ele fica amarelo e as peças já mostram onde vão parar; clicando, o alinhamento é aplicado. O painel mostra, para cada eixo, três opções: mínimo, centro e máximo (esquerda/centro/direita em X, frente/centro/trás em Y, base/centro/topo em Z).</p>
+  <ul>
+    <li><b>Sem referência</b>, cada objeto vai para a <b>média</b> dos objetos naquele ponto.</li>
+    <li><b>Clicando num dos objetos</b>, ele vira a referência (fica destacado em azul) e não se mexe; os pontos pretos passam para a volta dele e os outros se alinham a ele. Clique nele de novo para voltar à média.</li>
+  </ul>
+  <p>Peças presas por junção ficam de fora (quem manda nelas é a junção). <b>Concluir</b> ou <kbd>Esc</kbd> sai.</p>
+</section>
+
+<section id="selarea">
+  <h2>Seleção por área</h2>
+  <p>Arraste com o botão esquerdo a partir de um espaço vazio da vista: aparece um retângulo e, ao soltar, ficam selecionados os objetos que estão <b>inteiros</b> dentro dele. <kbd>Shift</kbd> soma à seleção atual; <kbd>Ctrl</kbd> tira.</p>
+  <p>No modo <b>Editar triângulos e vértices</b>, o retângulo funciona em qualquer lugar e marca os triângulos (só os virados para a câmera; com <kbd>Alt</kbd>, também os de trás) ou os vértices dentro dele. <kbd>Ctrl</kbd> desmarca.</p>
+</section>
+
+<section id="consolidar">
+  <h2>Consolidar e biblioteca de peças</h2>
+  <p>Peças complexas, com muitos grupos, furos e fillets, ficam pesadas porque o Anvil3D refaz as operações a cada mudança. <b>Consolidar</b> (<kbd>Ctrl</kbd>+<kbd>K</kbd>) funde a seleção (ou tudo, sem seleção) numa <b>peça única</b>: o resultado final, pronto, leve de mover, girar, combinar e exportar.</p>
+  <ul>
+    <li>A origem da peça consolidada fica no centro da base, como nas formas básicas.</li>
+    <li>A <b>receita</b> completa fica guardada dentro dela. <b>Voltar à receita</b> devolve todos os objetos originais, editáveis, no lugar onde a peça estiver agora.</li>
+    <li>Furos soltos (fora de grupos) não entram, como na exportação.</li>
+    <li>A peça consolidada é uma malha: pode ser simplificada, reparada e exportada como qualquer outra.</li>
+  </ul>
+  <h3>Biblioteca de peças</h3>
+  <p><b>Salvar na biblioteca</b> guarda o objeto selecionado (consolidado ou não) como uma peça reutilizável em <code>Documentos\Anvil3D\pecas</code>. Ela aparece na lista à esquerda em <b>Minhas peças</b>: um clique a insere em qualquer projeto, já pronta, sem refazer os passos. A receita vai junto, então <b>Voltar à receita</b> também funciona numa peça inserida.</p>
+  <p><b>Abrir pasta de peças</b> mostra os arquivos <code>.nvl3dpeca</code>: para apagar ou renomear uma peça, mexa direto na pasta e clique em <b>Recarregar</b>.</p>
+</section>
+
+<section id="juntar">
+  <h2>Juntar faces e junções</h2>
+  <p>Encosta uma face do objeto selecionado numa face de outro objeto e deixa os dois <b>presos</b>: depois você continua movendo a peça sobre a outra sem desfazer a junção.</p>
+  <ol>
+    <li>Selecione o objeto que vai se mover.</li>
+    <li>Aperte <kbd>J</kbd> (ou o botão <b>Juntar faces</b>).</li>
+    <li>Passe o mouse sobre o seu objeto: a face acende em <span class="cor" style="background:#e0a100"></span>amarelo. Clique na face que vai encostar.</li>
+    <li>Passe sobre o outro objeto: a face acende em <span class="cor" style="background:#2e9b4e"></span>verde. Clique na face de destino. A peça gira o mínimo necessário e encosta com os centros alinhados (com <kbd>Ctrl</kbd> só encosta, mantendo a posição lateral).</li>
+    <li><b>Opcional, alinhar arestas:</b> as arestas das duas peças aparecem. Clique numa aresta da peça presa e depois numa aresta da outra: a peça gira na face até as arestas ficarem paralelas e desliza até ficarem na mesma linha. <kbd>Esc</kbd> pula este passo.</li>
+  </ol>
+  <h3>Trabalhando com a peça presa</h3>
+  <ul>
+    <li><b>Deslizar:</b> arraste a peça com o mouse. Ela anda sobre a superfície da outra, passa de uma face para outra e acompanha curvas (a lateral de um cilindro, por exemplo), sempre encostada.</li>
+    <li><b>Acompanhar:</b> se a peça de apoio se mover ou girar, a peça presa vai junto. Cadeias funcionam (A presa em B presa em C).</li>
+    <li><b>Redimensionar:</b> ao mudar o tamanho ou os parâmetros da peça presa, a face de contato continua encostada e ela cresce para longe da outra.</li>
+    <li><b>Mover e girar a peça presa:</b> no <b>modo mover</b>, arrastar a peça a faz deslizar sobre a outra. Clique de novo nela (ou <kbd>R</kbd>) para o <b>modo girar</b>: arrastar a própria peça (ou o anel, que aparece no meio dela) a gira na face, em torno da normal do contato, e a junção continua. O painel mostra em destaque qual modo está ativo.</li>
+    <li><b>Giro na face</b> gira a peça em torno da normal do contato (botões de ±15° e ±90°). <b>Afastamento</b> deixa uma folga (positiva) ou uma interferência (negativa) em mm.</li>
+    <li><b>Alinhar arestas</b> repete o passo opcional a qualquer momento.</li>
+    <li><b>Soltar junção</b> (no painel, em <b>Objeto › Soltar junção</b> ou <kbd>Shift</kbd>+<kbd>J</kbd>, para todas as peças selecionadas) libera a peça onde ela está; ela volta a ter o gizmo e os campos de posição e rotação.</li>
+    <li><b>Prévia ao vivo:</b> enquanto você move, gira ou redimensiona a peça de apoio (pelo gizmo ou pelas alças), as peças presas a ela já acompanham na tela, antes de soltar o mouse.</li>
+  </ul>
+  <p><b>Furo preso:</b> quando um furo está preso a um sólido por junção (ou o contrário), a área do sólido que o furo vai cortar aparece numa versão <b>mais escura</b> da cor do sólido, antes mesmo de agrupar.</p>
+  <p>Enquanto presa, a peça não mostra posição, rotação absoluta, giro com pivô e espelhar: quem manda nela é a junção. Se a peça de apoio for agrupada ou excluída, a junção fica parada e volta a valer quando ela voltar.</p>
+  <p>Com vários objetos selecionados, o Juntar faces move todos juntos, mas sem criar junção. Juntar de novo uma peça que já estava presa troca a junção antiga pela nova. Duas peças não podem ficar presas uma na outra nos dois sentidos (nem em círculo, A em B em C em A): o programa avisa e pede para soltar uma antes. Dá para juntar em qualquer peça, inclusive grupos, peças com fillet/chanfro e malhas.</p>
+</section>
+
+<section id="arestas">
+  <h2>Fillet e chanfro</h2>
+  <p>Selecione um objeto e clique em <b>Fillet…</b> ou <b>Chanfro…</b> em <b>Arredondar arestas</b>.</p>
+  <ul>
+    <li>As arestas disponíveis aparecem desenhadas; a que está sob o mouse acende em amarelo forte.</li>
+    <li><b>Linha contínua</b> (ligada por padrão): um clique marca a linha inteira enquanto ela segue sem dobra forte (até 35° em cada junção), como a borda curva de um corte feita de muitos trechos; ao passar o mouse, a linha toda acende antes do clique. <kbd>Alt</kbd>+clique pega só um trecho.</li>
+    <li><b>Seguir tangentes</b> (ligado por padrão): o acabamento continua sozinho pelas arestas que emendam sem dobra (até 12°), como uma reta que vira curva. Assim ele não termina no meio de uma curva com um degrau triangular na ponta. Desligue para fazer o acabamento só nas arestas marcadas.</li>
+    <li><b>Pincel:</b> segure o botão e passe por cima das arestas para ir marcando uma a uma; se a primeira aresta tocada já estava marcada, o pincel desmarca.</li>
+    <li>Clique marca ou desmarca. Atalhos: <b>Todas</b>, <b>Do topo</b>, <b>Verticais</b> e <b>Nenhuma</b> (topo e verticais seguem os eixos do próprio objeto).</li>
+    <li>Digite o <b>Raio</b> (fillet) ou a <b>Distância</b> (chanfro). A prévia mostra em <span class="cor" style="background:#d63a2f"></span>vermelho o material que sai e em <span class="cor" style="background:#2e9b4e"></span>verde o que entra nos cantos internos.</li>
+    <li><b>Aplicar</b> (<kbd>Enter</kbd>) confirma; <b>Cancelar</b> (<kbd>Esc</kbd>) sai sem mudar nada.</li>
+  </ul>
+  <h3>Continua editável</h3>
+  <p>O acabamento vira um item próprio. Selecionando-o você pode trocar entre fillet e chanfro, mudar a medida, <b>Editar arestas</b>, mudar os parâmetros da forma de dentro (o acabamento acompanha) ou <b>Remover</b>. <b>Outro acabamento por cima</b> permite combinar, por exemplo, fillet nas verticais e chanfro no topo.</p>
+  <p>Se uma mudança fizer uma aresta deixar de existir, aparece um aviso amarelo e o resto continua funcionando.</p>
+  <div class="nota">Funciona em arestas retas (em qualquer ângulo) e em bordas circulares: topo de cilindro, borda de furo e cone. Bordas curvas livres (como a de um furo esférico cortando um cilindro) são divididas em trechos retos bem curtos; com a linha contínua elas são marcadas de uma vez, e o acabamento é feito numa <b>varredura contínua</b> ao longo da linha inteira, sem dentes nas emendas. Ao longo da linha, as direções das faces são suavizadas para o perfil não "tremer" em superfícies facetadas (esferas, cilindros). Onde as faces se encontram num ângulo muito fechado, o alcance do fillet é limitado a 3× o raio para não comer as faces, e o painel <b>avisa</b> quantas das arestas marcadas têm ângulo abaixo de 35°: ali o resultado tende a ficar irregular, e vale usar raio menor, chanfro ou deixar essas arestas de fora. Se a borda da peça já tiver degraus (por exemplo, uma extrusão torcida com poucas fatias), o fillet acompanha os degraus. Onde três fillets se encontram, o canto fica com uma pequena quina.</div>
+</section>
+
+<section id="malha">
+  <h2>Malha: triângulos e vértices</h2>
+  <p>Para editar triângulos e vértices, o objeto precisa ser uma <b>malha</b>. Há dois caminhos:</p>
+  <ul>
+    <li><b>Converter em malha editável</b>, no painel de qualquer objeto. A versão paramétrica fica guardada: <b>Voltar ao paramétrico</b> a restaura, descartando as edições de malha.</li>
+    <li><b>Importar STL</b> (<kbd>Ctrl</kbd>+<kbd>I</kbd>): a malha chega centrada e apoiada no plano.</li>
+  </ul>
+  <h3>Editar triângulos e vértices</h3>
+  <p>No modo <b>Triângulos</b>, clique marca ou desmarca. <b>Face plana</b> expande a seleção para todos os vizinhos no mesmo plano; <b>Inverter</b> e <b>Nenhum</b> ajudam a ajustar. <b>Apagar triângulos</b> (<kbd>Del</kbd>) remove os marcados.</p>
+  <p>No modo <b>Vértices</b>, clique seleciona um vértice e <kbd>Shift</kbd>+clique soma outros. Mova pelo gizmo (respeitando o passo de movimento) ou digite a posição com 3 casas decimais. Com vários vértices, o campo move o centro do grupo. As coordenadas são locais do objeto.</p>
+  <p><b>Concluir</b> ou <kbd>Esc</kbd> sai do modo. Cada operação entra no desfazer.</p>
+  <h3>Malha aberta</h3>
+  <p>Apagar triângulos deixa buracos. Uma malha aberta aparece e exporta normalmente, mas <b>não entra em grupos e furos</b>. Use <b>Fechar buracos</b>, que tampa cada abertura com um leque a partir do centro do contorno (ideal para buracos planos).</p>
+</section>
+
+<section id="simplificar">
+  <h2>Simplificar malhas</h2>
+  <p>Disponível no painel de qualquer malha e dentro do modo de edição.</p>
+  <ul>
+    <li><b>Manter (% dos triângulos)</b>: o alvo. 50 deixa metade.</li>
+    <li><b>Desvio máximo (mm)</b>: se for maior que zero, a simplificação para antes do alvo quando fosse deformar a peça além dessa medida. Bom valor para impressão: 0,05 a 0,1 mm.</li>
+    <li><b>Travar bordas abertas</b>: mantém intactos os contornos de buracos.</li>
+  </ul>
+  <p>O algoritmo (meshoptimizer) remove primeiro os triângulos de regiões planas e preserva os detalhes. A barra de status mostra quantos triângulos sobraram e o desvio real.</p>
+</section>
+
+<section id="reparo">
+  <h2>Reparar para impressão</h2>
+  <p>Arquivos STL baixados da internet ou vindos de outros programas muitas vezes têm defeitos que fazem o fatiador errar: paredes faltando, camadas sumindo ou peças ocas. Toda malha mostra no painel a seção <b>Impressão 3D</b> com o diagnóstico:</p>
+  <table>
+    <tr><th>Item</th><th>O que significa</th></tr>
+    <tr><td>Buracos</td><td>Arestas usadas por um triângulo só: a peça não é fechada e o fatiador não sabe o que é dentro e fora.</td></tr>
+    <tr><td>Arestas com mais de duas faces</td><td>Geometria "não-manifold", como duas peças encostadas numa aresta ou paredes coladas.</td></tr>
+    <tr><td>Normais invertidas</td><td>Triângulos virados para dentro; o fatiador pode tratar a região como vazia.</td></tr>
+    <tr><td>Triângulos duplicados</td><td>Faces repetidas no mesmo lugar.</td></tr>
+    <tr><td>Peças separadas</td><td>Mais de uma casca no arquivo. Não é erro, mas cascas sobrepostas atrapalham o fatiamento.</td></tr>
+  </table>
+  <p><b>Reparar para impressão</b> faz, em ordem: solda vértices repetidos, remove triângulos degenerados e duplicados, tira faces de arestas malformadas, acerta a orientação das normais (todas para fora), fecha buracos, remove peças soltas minúsculas e une as cascas sobrepostas num corpo só. A barra de status mostra o relatório do que foi corrigido.</p>
+  <ul>
+    <li><b>Fechar buracos</b>: tampa cada abertura a partir do centro do contorno.</li>
+    <li><b>Unir peças sobrepostas</b>: funde cascas que se atravessam, como o fatiador espera.</li>
+    <li><b>Remover peças soltas menores que</b>: limpa lixo e fragmentos (0 desliga).</li>
+  </ul>
+  <p>Ao importar um STL, o Anvil3D já avisa se ele tem problemas. Ao exportar, também avisa se alguma malha precisa de reparo ou se a peça não está apoiada no plano (Z = 0).</p>
+  <div class="nota">Peças paramétricas (formas, grupos, acabamentos) sempre saem fechadas e corretas; o reparo é para malhas importadas ou editadas. Auto-interseções dentro de uma mesma casca e buracos muito retorcidos podem precisar de ajuste manual em <b>Editar triângulos e vértices</b>.</div>
+</section>
+
+<section id="arquivos">
+  <h2>Arquivos, salvar e exportar</h2>
+  <ul>
+    <li><b>Abrir</b> (<kbd>Ctrl</kbd>+<kbd>O</kbd>) tem à esquerda os <b>locais</b> (projetos do Anvil3D, Documentos, Área de trabalho, pasta pessoal, unidades) e os <b>recentes</b>; no meio, as pastas e os projetos <code>.nvl3d</code> da pasta atual (clique numa pasta para entrar, na trilha do caminho para voltar); à direita, a <b>prévia</b> grande, a data, a quantidade de objetos e a <b>descrição</b> do projeto, com os botões Abrir e Cancelar. Duplo clique num projeto também abre. A miniatura é gravada no próprio projeto ao salvar.</li>
+    <li><b>Salvar como</b> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) e o primeiro <b>Salvar</b> de um projeto novo usam a mesma janela: pastas à esquerda, e à direita a prévia do projeto, o <b>nome do arquivo</b> e a <b>descrição</b>, que pode ser editada ali mesmo (no Salvar como ela já vem com a do projeto atual). Clicar num projeto da lista usa o nome dele (para substituir, com confirmação). Depois que o projeto tem arquivo, <kbd>Ctrl</kbd>+<kbd>S</kbd> grava direto, sem janela.</li>
+    <li><b>Arquivo › Propriedades do projeto…</b> guarda uma descrição curta (para que serve, medidas, material), que aparece na prévia do Abrir.</li>
+    <li><b>Novo</b>, <b>Abrir</b>, <b>Salvar</b> e <b>Salvar como</b> trabalham com projetos <code>.nvl3d</code>, a extensão oficial do Anvil3D. Projetos antigos <code>.anvil</code> ainda abrem; ao salvar, viram <code>.nvl3d</code> com o mesmo nome.</li>
+    <li>O arquivo é um JSON legível com a árvore inteira; malhas ficam compactadas dentro dele.</li>
+    <li>Ao salvar, a versão anterior vira <code>.bak</code> ao lado do arquivo.</li>
+    <li>Os STLs saem nas <b>coordenadas da mesa</b> (origem na quina), sem recentralizar: as peças guardam a posição relativa entre si. <b>Exportar STL por objeto…</b> grava um arquivo por objeto numa pasta, todos com a mesma origem; abrindo-os juntos no fatiador (no PrusaSlicer/Orca, aceite carregar como um objeto de várias partes), elas se remontam sozinhas, ótimo para impressão multicor.</li>
+    <li>Ao importar um STL que já cabe na mesa, ele fica onde estava; os outros chegam centrados na mesa.</li>
+    <li>Projetos de versões anteriores (com a origem no meio da mesa) são ajustados ao abrir, sem mudar a posição das peças na mesa.</li>
+    <li><b>Exportar STL</b> (<kbd>Ctrl</kbd>+<kbd>E</kbd>) exporta a seleção ou, sem seleção, tudo. Sólidos são unidos num só corpo; furos soltos não entram. Se houver malha aberta, as peças saem lado a lado sem fundir, com aviso.</li>
+    <li><b>Copiar/Colar</b> (<kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd>) funciona entre janelas do Anvil3D, mantendo parâmetros e histórico.</li>
+    <li>Ao fechar com alterações, o programa pergunta se quer salvar.</li>
+  </ul>
+  <p>Projetos e plugins ficam por padrão em <code>Documentos\Anvil3D</code>.</p>
+</section>
+
+<section id="historico">
+  <h2>Desfazer e segurança</h2>
+  <p><kbd>Ctrl</kbd>+<kbd>Z</kbd> desfaz e <kbd>Ctrl</kbd>+<kbd>Y</kbd> refaz, até 300 passos. Mover, mudar parâmetros, agrupar, aplicar fillet e editar malha: tudo entra no histórico.</p>
+  <p>Se um plugin usado num projeto não estiver instalado, o objeto aparece em vermelho, mas os dados dele continuam no arquivo. Ao reinstalar o plugin, a peça volta.</p>
+</section>
+
+<section id="ajustes">
+  <h2>Ajustes da barra de status</h2>
+  <p><b>Passo de movimento</b>: o encaixe ao arrastar e ao mover pelas setas do teclado (livre, 0,1 a 10 mm).</p>
+  <p><b>Passo de giro</b>: o encaixe do giro pelos anéis do gizmo (livre, 1° a 90°).</p>
+  <p><b>Resolução de curvas</b>: quantos segmentos têm cilindros, esferas e arcos. <i>Rascunho</i> é mais rápido para montar; <i>fina</i> dá superfícies mais lisas no STL. Formas com número de lados definido não mudam.</p>
+  <p>Esses ajustes ficam guardados entre uma sessão e outra.</p>
+</section>
+
+<section id="idioma">
+  <h2>Idioma</h2>
+  <p>O Anvil3D funciona em português (padrão) e inglês. Troque em <b>Preferências › Português / English</b>. A interface inteira e este manual mudam na hora, sem fechar o projeto, e a escolha fica guardada. Os números seguem o idioma: vírgula decimal em português, ponto em inglês (os campos aceitam os dois).</p>
+  <p>Nomes que você deu aos objetos não são traduzidos. As formas internas aparecem no idioma escolhido; os seus plugins também podem trazer nomes em inglês (veja Criar plugins).</p>
+</section>
+
+<section id="atalhos">
+  <h2>Atalhos de teclado</h2>
+  <table>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd> / <kbd>O</kbd> / <kbd>S</kbd></td><td>Novo, abrir, salvar</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Salvar como</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd> / <kbd>Ctrl</kbd>+<kbd>I</kbd></td><td>Exportar STL / importar STL</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Desfazer / refazer</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>V</kbd> / <kbd>D</kbd></td><td>Copiar, colar, duplicar</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>G</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd></td><td>Agrupar / desagrupar</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>Consolidar</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd></td><td>Selecionar tudo</td></tr>
+    <tr><td><kbd>Del</kbd></td><td>Excluir (no modo malha: apagar triângulos)</td></tr>
+    <tr><td><kbd>H</kbd></td><td>Alternar sólido/furo</td></tr>
+    <tr><td><kbd>J</kbd> / <kbd>Shift</kbd>+<kbd>J</kbd></td><td>Juntar faces / soltar junção</td></tr>
+    <tr><td><kbd>B</kbd></td><td>Face na mesa</td></tr>
+    <tr><td><kbd>R</kbd></td><td>Gizmo: alternar mover e girar</td></tr>
+    <tr><td><kbd>L</kbd></td><td>Alinhar</td></tr>
+    <tr><td><kbd>M</kbd></td><td>Espelhar</td></tr>
+    <tr><td><kbd>T</kbd></td><td>Mostrar triângulos</td></tr>
+    <tr><td><kbd>F</kbd> / <kbd>Home</kbd></td><td>Enquadrar / vista isométrica</td></tr>
+    <tr><td>Setas, <kbd>Ctrl</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd></td><td>Mover em X/Y, em Z</td></tr>
+    <tr><td><kbd>Enter</kbd></td><td>Aplicar fillet/chanfro</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>Cancelar a ferramenta ou limpar a seleção</td></tr>
+    <tr><td><kbd>F1</kbd></td><td>Este manual</td></tr>
+    <tr><td><kbd>F12</kbd></td><td>Console de desenvolvimento (para plugins)</td></tr>
+  </table>
+</section>
+
+<section id="plugins">
+  <h2>Criar plugins</h2>
+  <p>Cada forma da biblioteca é um plugin: um arquivo <code>.mjs</code>. Os seus ficam em <code>Documentos\Anvil3D\plugins</code> (subpastas valem). <b>Abrir pasta de plugins</b> leva até lá, e <b>Recarregar</b> lê de novo sem reiniciar. Na pasta há um exemplo (Arruela) e o arquivo <code>LEIA-ME.md</code> com o contrato completo.</p>
+<pre>export default {
+  api: 1, id: 'meu.suporte', nome: 'Suporte', categoria: 'Meus plugins', icone: '⌐',
+  en: { nome: 'Bracket', categoria: 'My plugins', rotulos: { largura: 'Width' } },
+  parametros: [ { chave: 'largura', rotulo: 'Largura', padrao: 30, min: 1 } ],
+  gerar(p, { Manifold, CrossSection, segmentos }) {
+    return Manifold.cube([p.largura, 10, 10], true).translate([0, 0, 5]);
+  },
+};</pre>
+  <p>O bloco opcional <code>en</code> traz os textos em inglês: <code>nome</code>, <code>categoria</code>, <code>descricao</code>, <code>rotulos</code> (rótulo por chave de parâmetro) e <code>opcoes</code> (rótulo por valor de opção).</p>
+  <p>Tipos de parâmetro: número (com <code>min</code>, <code>max</code>, <code>inteiro</code>), <code>booleano</code>, <code>opcao</code>, <code>texto</code> e <code>pontos</code>. Um plugin seu com o mesmo <code>id</code> de um interno o substitui. Não mude o <code>id</code> depois de usar o plugin em projetos.</p>
+  <h3>Criar formas com qualquer IA</h3>
+  <p><b>Ajuda › Criar formas com IA…</b> mostra um pedido pronto, com todas as regras do contrato, a API e um exemplo completo. Copie, cole em qualquer IA (Claude, ChatGPT, Gemini…), descreva no fim a forma que você quer e salve a resposta como <code>.mjs</code> na pasta de plugins. Se você colar a resposta inteira, com o texto da IA e as marcas <code>```</code> em volta do código, o Anvil3D aproveita só o código; se a IA exportar o plugin com outro nome em vez de <code>export default</code>, ele também é aceito. O mesmo texto está em <code>GERAR-FORMAS-COM-IA.md</code> (e em inglês em <code>GENERATE-SHAPES-WITH-AI.md</code>) na pasta de plugins.</p>
+  <p>Erros de plugin aparecem em vermelho embaixo da lista de formas. <kbd>F12</kbd> abre o console.</p>
+</section>
+
+<section id="problemas">
+  <h2>Solução de problemas</h2>
+  <h3>Objeto vermelho aramado</h3>
+  <p>A geração falhou. Selecione-o e leia a mensagem no painel: em geral é uma medida impossível (furo maior que a peça) ou um plugin ausente.</p>
+  <h3>"Malha aberta" ao agrupar</h3>
+  <p>Selecione a malha e use <b>Fechar buracos</b>.</p>
+  <h3>Aviso de aresta não encontrada</h3>
+  <p>Depois de uma mudança grande, o fillet não achou a aresta original. Selecione o acabamento e use <b>Editar arestas</b>.</p>
+  <h3>Tela 3D não aparece</h3>
+  <p>Atualize o driver de vídeo. O Anvil3D precisa de WebGL.</p>
+  <h3>Aviso do Windows ao abrir</h3>
+  <p>O executável não é assinado digitalmente. Clique em <i>Mais informações</i> e depois em <i>Executar assim mesmo</i>.</p>
+</section>
+
+<footer class="assinatura">Anvil3D · © 2026 Luiz Pacheco · GPL-3.0 · <a href="mailto:luizgpf@gmail.com" target="_blank">luizgpf@gmail.com</a> · <a href="https://nobetteridea.com" target="_blank">nobetteridea.com</a> · <a href="https://github.com/lgpf/anvil3d" target="_blank">github.com/lgpf/anvil3d</a> · <a href="https://ko-fi.com/anvil3d" target="_blank">♥ Apoie o Anvil3D no Ko-fi</a></footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' app:; style-src 'self' app: 'unsafe-inline'; img-src 'self' app: data:">
+<title>Anvil3D manual</title>
+<style>
+  :root { --aco: #dde2e3; --aco-claro: #eef1f1; --linha: #b8c1c4; --tinta: #1e2a30; --suave: #56656c; --azul: #2f6f8f; --latao: #e0a100;
+    font-family: Bahnschrift, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--tinta); font-size: 14px; }
+  * { box-sizing: border-box; }
+  body { margin: 0; display: grid; grid-template-columns: 230px 1fr; height: 100vh; }
+  nav { background: var(--aco); border-right: 1px solid var(--linha); overflow-y: auto; padding: 14px 10px; }
+  nav h1 { font-size: 17px; margin: 0 0 10px 6px; }
+  nav a { display: block; padding: 4px 6px; color: var(--tinta); text-decoration: none; border-radius: 4px; }
+  nav a:hover { background: var(--aco-claro); }
+  main { overflow-y: auto; padding: 18px 36px 80px; background: #fff; }
+  section { max-width: 720px; scroll-margin-top: 12px; }
+  h2 { font-size: 20px; margin: 30px 0 8px; padding-bottom: 4px; border-bottom: 2px solid var(--latao); display: inline-block; }
+  section:first-child h2 { margin-top: 4px; }
+  h3 { font-size: 15px; margin: 18px 0 4px; }
+  p, li { line-height: 1.55; }
+  ul, ol { padding-left: 22px; }
+  kbd { font-family: inherit; font-size: 12px; background: var(--aco-claro); border: 1px solid var(--linha); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; white-space: nowrap; }
+  .nota { background: #fff4d6; border: 1px solid #ecd08a; border-radius: 4px; padding: 8px 12px; margin: 10px 0; }
+  table { border-collapse: collapse; margin: 8px 0; }
+  td, th { border-bottom: 1px solid var(--aco); padding: 5px 14px 5px 0; text-align: left; vertical-align: top; }
+  th { color: var(--suave); font-weight: 600; }
+  code, pre { font-family: Consolas, monospace; font-size: 12.5px; background: var(--aco-claro); border-radius: 4px; }
+  code { padding: 0 4px; }
+  .assinatura { max-width: 720px; margin-top: 40px; padding-top: 10px; border-top: 1px solid var(--aco); color: var(--suave); font-size: 12.5px; }
+  .assinatura a { color: var(--azul); }
+  pre { padding: 10px 12px; overflow-x: auto; }
+  .cor { display: inline-block; width: 11px; height: 11px; border-radius: 2px; vertical-align: -1px; margin-right: 3px; }
+</style>
+</head>
+<body>
+<nav>
+  <h1>Manual</h1>
+  <a href="#inicio">Getting started</a>
+  <a href="#navegacao">Navigating the 3D view</a>
+  <a href="#formas">Shapes and library</a>
+  <a href="#selecao">Selecting</a>
+  <a href="#mover">Moving and positioning</a>
+  <a href="#tamanho">Size and scale</a>
+  <a href="#girar">Rotating and pivot</a>
+  <a href="#facemesa">Face to bed</a>
+  <a href="#espelhar">Mirror</a>
+  <a href="#furo">Solid and hole</a>
+  <a href="#grupo">Group and ungroup</a>
+  <a href="#projetar">Project and SVG</a>
+  <a href="#exportar">Export</a>
+  <a href="#preferencias">Preferences</a>
+  <a href="#operacoes">Operations</a>
+  <a href="#variosobjetos">Several parts</a>
+  <a href="#espelharmodo">Mirror</a>
+  <a href="#alinhar">Align</a>
+  <a href="#selarea">Area selection</a>
+  <a href="#consolidar">Consolidate and library</a>
+  <a href="#juntar">Join faces and joints</a>
+  <a href="#arestas">Fillet and chamfer</a>
+  <a href="#malha">Mesh: triangles and vertices</a>
+  <a href="#simplificar">Simplifying meshes</a>
+  <a href="#reparo">Repair for printing</a>
+  <a href="#arquivos">Files, saving and exporting</a>
+  <a href="#historico">Undo and safety</a>
+  <a href="#ajustes">Status bar settings</a>
+  <a href="#idioma">Language</a>
+  <a href="#atalhos">Keyboard shortcuts</a>
+  <a href="#plugins">Writing plugins</a>
+  <a href="#problemas">Troubleshooting</a>
+</nav>
+<main>
+
+<section id="inicio">
+  <h2>Getting started</h2>
+  <p>Anvil3D is a local CAD in the style of Tinkercad: you build parts by combining solid shapes and hole shapes. The main difference is that the project (<code>.nvl3d</code>) keeps the part's <b>full recipe</b>. You can reopen it, ungroup and change any size years later. The STL is just an export.</p>
+  <ol>
+    <li>Click a shape in the list on the left (for example, <b>Box</b>): it appears in the middle of the bed. Or click, hold and <b>drag</b> the shape into the view: the part itself follows the mouse, translucent, over the bed, and stays where you drop it, resting at Z = 0 (following the move step).</li>
+    <li>Adjust its sizes in the right panel, under <b>Parameters</b>.</li>
+    <li>Drag the colored arrows to move it.</li>
+    <li>Turn another shape into a <b>Hole</b>, select both and click <b>Group</b>: the hole is subtracted.</li>
+    <li><b>Save</b> writes the project; <b>Export STL</b> creates the file for the slicer.</li>
+  </ol>
+  <p>The top bar has the <b>File</b>, <b>Edit</b>, <b>Object</b>, <b>View</b> and <b>Help</b> menus, with every command and shortcut, and on the right the most used buttons: undo/redo, move/rotate, join faces, face to bed, group, solid/hole and export.</p>
+  <p>Almost everywhere in the panel there is a small <b>?</b> next to the titles with a quick tip about that part. <kbd>F1</kbd> opens this manual.</p>
+</section>
+
+<section id="navegacao">
+  <h2>Navigating the 3D view</h2>
+  <table>
+    <tr><th>Action</th><th>How</th></tr>
+    <tr><td>Orbit the view</td><td>Drag with the <b>right</b> button</td></tr>
+    <tr><td>Pan the view</td><td>Drag with the <b>middle</b> button</td></tr>
+    <tr><td>Zoom</td><td>Mouse wheel</td></tr>
+    <tr><td>Fit all</td><td><kbd>F</kbd> or View › Fit all</td></tr>
+    <tr><td>Isometric view</td><td><kbd>Home</kbd> or View › Isometric</td></tr>
+    <tr><td>Top, front, right</td><td>View menu</td></tr>
+  </table>
+  <p>The work plane is the <b>print bed</b>: the origin (0, 0, 0) is at the <b>front-left corner</b>, where the X (red), Y (green) and Z (blue) arrows are, and the bed extends to +X and +Y, like on a 3D printer. New parts appear in the middle of the bed. Choose the bed size in <b>Preferences › Bed</b> (200, 220, 256 or 300 mm); it is remembered. The preset views (isometric, top, front, right) show the whole bed, with the origin at the bottom left; <kbd>F</kbd> fits only the parts.</p>
+  <p><b>Show triangles</b> (<kbd>T</kbd>) shows the mesh of every part. The status bar shows the total number of triangles in the scene.</p>
+</section>
+
+<section id="formas">
+  <h2>Shapes and library</h2>
+  <p>The list on the left shows every available shape, grouped by category:</p>
+  <ul>
+    <li><b>Basic</b>: Box, Cylinder, Cone, Wedge, Sphere, Pyramid, Torus and Tube.</li>
+    <li><b>Generators</b>: Gear, Polygon extrusion (with twist and top scale) and Profile Revolve.</li>
+    <li><b>My plugins</b>: shapes you created yourself (yellow icon).</li>
+    <li><b>My parts</b>: parts saved to the library (see Consolidate and library).</li>
+  </ul>
+  <p>Every shape is created centered in X/Y and resting on Z = 0. Its parameters are in the right panel and can be changed at any time.</p>
+  <h3>Box and cylinder with rounded edges</h3>
+  <p>The <b>Box</b> has the <b>Round</b> option (vertical edges, vertical and top, or all edges) with a <b>Radius</b>. The <b>Cylinder</b> has an independent fillet or chamfer on the top and bottom edges. These roundings are exact and lighter than the general edge tool.</p>
+  <p>The list thumbnails use each shape's color, which is also the color of new parts; plugins can set theirs with <code>cor</code>.</p>
+  <h3>The shape library</h3>
+  <p>Shapes are organized in categories, like in Tinkercad: <b>Basic</b>, <b>Polyhedra</b> (the 5 Platonic solids; the Archimedean ones: truncated tetrahedron, cube, octahedron, dodecahedron and icosahedron, cuboctahedron, rhombicuboctahedron, truncated cuboctahedron, snub cube, icosidodecahedron, rhombicosidodecahedron, truncated icosidodecahedron and the <b>soccer ball</b>; the rhombic dodecahedron and triacontahedron; the stella octangula; the geodesic sphere with adjustable frequency; N-sided bipyramid and antiprism — each resting on a face), <b>Symbols</b> (heart, arrow, lightning, plus, moon, drop), <b>Fasteners</b> (screw, nut, washer), <b>Mechanics</b> (gear, rack of the same module, pulley with a V or round groove, spring), <b>Joints</b> (pin, dovetail, L bracket, hook and the <b>ball joint</b>: the <b>ball</b> with a neck — disc base, no base or double ball — and the snap-fit <b>socket</b>, with a mouth narrower than the ball and flex slots; use the same ball diameter on both), <b>Containers</b> (open box, a lid that fits it, cup), <b>Generators</b> (extrusion, profile revolve and the <b>bent pipe</b>: pipe and hole profiles in circle, square or hexagon, or solid, width, wall, bend radius and angle, and straight inlet and outlet lengths), plus your plugins and your parts. Click a category name to collapse or expand it (when the program starts, only Basic is open), and use <b>Search shape…</b> at the top to find by name (<kbd>Esc</kbd> clears). Shapes like the pin and dovetail have a <b>Clearance</b> setting, to use the same part as the hole of the joint.</p>
+  <h3>Paraboloid, Half sphere and Half cylinder</h3>
+  <p><b>Paraboloid</b>: dome with a parabolic profile (can be flipped upside down, like a bowl). <b>Half sphere</b>: the top half of a sphere, with adjustable height (flattened or stretched). <b>Half cylinder</b>: extruded semicircle, as a <b>round roof</b> (curve up) or a <b>half disc</b> lying down (D shape).</p>
+  <h3>Fasteners: Screw and Nut</h3>
+  <p><b>Screw</b> with a real (helical) thread: <b>ISO metric</b> coarse pitch (M2 to M12), <b>wood screw</b> (wide pitch and sharp tip) or <b>plain</b>. <b>Hex</b>, <b>socket cap</b>, <b>pan</b>, <b>flat</b> (countersunk, 90°) or no head (threaded rod); <b>slot</b>, <b>Phillips</b> or <b>hex socket</b> drive. You can thread only part of the length. The screw comes out head down, the best position for printing.</p>
+  <p><b>Nut</b>: hex nut with a metric internal thread, chamfered on both sides, standard or custom height.</p>
+  <p><b>Printing clearance</b>: printers usually make parts a little fatter. For the screw, the clearance reduces the diameter; for the nut, it enlarges the hole. Start with 0.2 mm on the nut and adjust for your printer. Threads below M4 are hard to print on FDM.</p>
+  <h3>Polygon, Star and Text</h3>
+  <p><b>Polygon</b>: N-sided prism (triangle, hexagon…), measured across corners (outer diameter) or across flats (wrench size, like a nut), with optional rotation and <b>twist</b> (the top turns relative to the base).</p>
+  <p><b>Star</b>: N equal points; with inner diameter 0 it comes out "perfect" (for 5 points, the pentagram, with the edges of opposite points aligned). Shape <b>flat</b>, <b>conical</b> (faces rise to a tip in the center; you can keep a straight base) or <b>double conical</b>, also with an optional <b>twist</b>.</p>
+  <p><b>Text</b>: type the text (Enter breaks the line), choose the font — Anvil3D's own or any installed in Windows —, the letter height (capital height, in mm) and the thickness. The shape can be <b>flat</b> (lying on the bed), <b>standing</b> or <b>around a cylinder</b>: enter the cylinder radius and the direction. <b>Outward</b> makes raised letters; <b>inward</b> makes the letters go into the cylinder at the chosen depth — mark the text as a <b>Hole</b>, put it at the same center (X and Y) as the cylinder, at the height you want, and group to engrave. The text is centered at the front (−Y side).</p>
+  <h3>Profile Revolve</h3>
+  <p><b>✎ Draw profile…</b> opens a 2D editor with the axis of revolution (dashed blue line): with <b>Line</b> you click corners, with <b>Curve</b> smooth points, with <b>Freehand</b> you drag to draw; with any tool you can drag points, double-click toggles corner/smooth and right-click or <kbd>Del</kbd> deletes. The grid snaps points (free to 5 mm), the wheel zooms and the middle button pans. The profile always stays to the right of the axis and can be drawn in either direction (clockwise or counterclockwise); if it has no area (points in a line or on the axis), the part shows the error instead of disappearing. The drawing is kept in the object and can be reopened and changed as long as the part is a Profile Revolve (before converting to mesh or consolidating). <b>Polygon extrusion</b> has the same editor, without the axis.</p>
+  <p>You can also type the profile by hand: one point per line as <code>r, z</code>: <code>r</code> is the distance to the axis and <code>z</code> is the height. Start angle and sweep angle accept one decimal place. To use another axis, rotate the object afterwards with any pivot you like.</p>
+  <h3>Number fields</h3>
+  <p>They accept a decimal point or comma and simple math: <code>45/2</code>, <code>10+3.5</code>, <code>(20-4)*2</code>. <kbd>Enter</kbd> confirms and <kbd>Esc</kbd> undoes what you typed.</p>
+</section>
+
+<section id="selecao">
+  <h2>Selecting</h2>
+  <ul>
+    <li>Click an object to select it; click empty space to clear the selection.</li>
+    <li><kbd>Shift</kbd>+click or <kbd>Ctrl</kbd>+click adds to or removes from the selection.</li>
+    <li><kbd>Ctrl</kbd>+<kbd>A</kbd> selects everything; <kbd>Esc</kbd> clears.</li>
+  </ul>
+  <p>Selected objects get a yellow outline. A red wireframe object has an error (for example, a plugin that is not installed); the message appears in the panel.</p>
+</section>
+
+<section id="mover">
+  <h2>Moving and positioning</h2>
+  <p>Drag the gizmo arrows (red X, green Y, blue Z) or the small squares to move along two axes. Movement follows the <b>Move step</b> in the status bar. With several objects selected, they all move together.</p>
+  <p>While you drag the gizmo, <b>displacement dimensions</b> appear: dimension lines from the starting position (marked with a cross), only on the axes the part moved along, with each value (X red, Y green, Z blue).</p>
+  <p>With the keyboard: arrows move in X and Y; <kbd>Ctrl</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> move in Z, one step at a time.</p>
+  <p>In <b>Origin position</b> you type the exact coordinates. A shape's origin is the center of its base. A group's origin is the base center of the box that enclosed the parts when the group was created.</p>
+  <p><b>Drop to bed</b> lowers or raises the object until its lowest point is at Z = 0.</p>
+</section>
+
+<section id="tamanho">
+  <h2>Size and scale</h2>
+  <p><b>On the part itself:</b> the selected object shows white handles. The handles sit on the corners and on top; the ones on the middle of the sides can be turned on in <b>Preferences › Handles on the middle of the sides</b>. <b>Pointing the mouse at a handle</b> (or dragging it) shows the dimension it changes — the top handle shows the height, the side ones the width or depth, the corner ones both. The dimension stays on screen after the mouse leaves the handle, until you rotate the view, change the selection or click elsewhere, so you can click it; with <kbd>Shift</kbd> all three appear. When you rotate the view, the dimensions disappear.</p>
+  <ul>
+    <li>Handles in the middle of the bottom edges change only that size (X or Y); the corner handles change X and Y together; the top handle changes the height. With <kbd>Shift</kbd> held, any handle changes <b>all three sizes in the same proportion</b> and turns <b>blue</b> to make that clear.</li>
+    <li>The side opposite the handle stays put; the size follows the move step and appears in the status bar while you drag.</li>
+    <li>Click a dimension to type the exact size (math like <code>45/2</code> works); <kbd>Enter</kbd> applies, <kbd>Esc</kbd> cancels. With <kbd>Shift</kbd> the dimensions turn blue: clicking one that way, the typed size changes all three in the same proportion.</li>
+  </ul>
+  <p>Under <b>Size</b> you see and type the sizes along the object's own axes. Changing the size applies a scale; <b>Scale 100%</b> goes back to the parameter sizes.</p>
+  <div class="nota">Whenever possible, change sizes through the <b>Parameters</b>: holes, radii and chamfers then keep the right size. Scale distorts everything together; a round hole becomes oval if the X and Y scales differ.</div>
+</section>
+
+<section id="girar">
+  <h2>Rotating and pivot</h2>
+  <h3>Rotating with the gizmo</h3>
+  <p>Click the already selected part again (or press <kbd>R</kbd>, or the <b>✥ Move / ⟳ Rotate</b> button) to swap the arrows for the <b>rotation rings</b>; click again to go back to moving. While rotating, the label shows the angle of the ring in use (for example, <b>Z +34.4°</b>); in free rotation (sphere or screen ring) it shows all three: <b>X, Y and Z</b>. The rings sit around the part, with a limited size on large parts, on the <b>pivot chosen in the panel</b> (default: the part's <b>bounding box center</b>; the yellow marker shows where) and dragging a ring rotates the part around it; rotation follows the <b>Rotation step</b> in the status bar and the label above the part shows the angle. With several parts selected, they all rotate together.</p>
+  <h3>Absolute rotation</h3>
+  <p>Shows and sets the X, Y and Z angles (one decimal place) around the object's origin.</p>
+  <h3>Rotate around a point</h3>
+  <p>Choose the <b>Pivot</b>, the <b>Axis</b> and the <b>Angle</b>, and click <b>Rotate +</b> (counterclockwise by the right-hand rule) or <b>Rotate −</b>. The yellow marker in the view shows where the pivot is.</p>
+  <table>
+    <tr><th>Pivot</th><th>Where it is</th></tr>
+    <tr><td>Bounding box center</td><td>Center of the box that encloses the selection</td></tr>
+    <tr><td>Base center</td><td>Center, at the lowest height</td></tr>
+    <tr><td>Minimum corner</td><td>Corner with the smallest X, Y and Z</td></tr>
+    <tr><td>Object origin</td><td>The origin of the last selected object</td></tr>
+    <tr><td>Chosen point</td><td>Typed coordinates, or <b>Pick on model</b>: click the part and it snaps to the nearest vertex (up to 2 mm)</td></tr>
+  </table>
+  <p>With several objects selected, they all rotate together around the same pivot.</p>
+</section>
+
+<section id="facemesa">
+  <h2>Face to bed</h2>
+  <p>To rest the part on the bed by a specific face (the widest one, to print without supports, for example): select the part, click <b>Face to bed</b> (or <kbd>B</kbd>), hover over it (the face lights up in yellow) and click the chosen face. The part rotates so that face points down and lowers until it touches Z = 0. With several parts selected, they all rotate and lower together. <kbd>Esc</kbd> cancels.</p>
+</section>
+
+<section id="espelhar">
+  <h2>Mirror</h2>
+  <p><b>Mirror X/Y/Z</b> flips the selection around its center. The object stays editable; its parameters do not change.</p>
+</section>
+
+<section id="furo">
+  <h2>Solid and hole</h2>
+  <p>Every object is a <b>Solid</b> or a <b>Hole</b> (the <kbd>H</kbd> key toggles). Holes are gray and translucent and only cut when grouped with solids. While they are not grouped, the part of a solid that a hole invades is shown in a <b>darker</b> shade of the solid's color, showing what will be cut. A loose hole on the bed does not go into the STL.</p>
+</section>
+
+<section id="grupo">
+  <h2>Group and ungroup</h2>
+  <p>Select two or more objects and use <b>Group</b> (<kbd>Ctrl</kbd>+<kbd>G</kbd>): solids are joined and holes are subtracted. A group can be a solid or a hole and can go inside another group.</p>
+  <p><b>Ungroup</b> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd>) gives back the original parts, with their positions and parameters. That is what makes Anvil3D different from working with STL only.</p>
+  <p>A group is <b>multicolor</b>: each part keeps the color of the shape it came from, and surfaces cut by holes take the color of the first solid. Choosing a color for the group paints it all one color; the <b>Multicolor</b> checkbox goes back to the parts' colors.</p>
+  <h3>Opacity</h3>
+  <p>Every solid object has an <b>Opacity</b> slider in the panel to make it transparent in its chosen color and see what is inside or behind it. It is only visual: it does not change the STL.</p>
+</section>
+
+<section id="projetar">
+  <h2>Project onto surface and import SVG</h2>
+  <p><b>Project onto surface</b> (<b>Object › Project onto surface</b> or the panel button with two parts selected): first select the part to apply — a text, a logo, a thin plate — and then, with <kbd>Shift</kbd>+click, the target part. Place the part facing the surface (for example, a flat text above a dome, or a standing text in front of a curved part). It is "decaled" along its thickness and follows the curves and irregularities of the surface, keeping its thickness. A <b>solid</b> part becomes a relief (it goes slightly into the surface to stick); a <b>hole</b> becomes an engraving. Then group it with the target. The result is a mesh that keeps the original part: <b>Back to recipe</b> undoes the projection.</p>
+  <p><b>Apply to face…</b> (<b>Object › Apply to face…</b>) does this more directly, including on <b>inclined surfaces</b> (a ramp, the side of a rotated part, a dome): select just the part to apply — for example, a flat text made on the bed — and click the point on the other part where it should go. The part is laid on the clicked face, centered on the point, and is <b>readable from where you are looking</b> (rotate the view first if you want the text in another direction). It is "decaled" keeping its size along curves — the text bends over a sphere or a half cylinder instead of stretching — and the letters stand on the surface at every point, as a relief (solid) or an engraving (hole). <kbd>Esc</kbd> cancels.</p>
+  <p><b>File › Import SVG…</b> brings a vector drawing (from Inkscape, Illustrator, icon sites) as an extruded part: paths, rectangles, circles, ellipses and polygons, with transforms applied. Outlines inside outlines become holes (like the inside of an "O"), or tick <b>Fill the holes</b>. In the panel you can change the <b>width</b> (the drawing's height follows), the extrusion <b>height</b> and <b>mirror</b> it. SVG texts must be converted to paths in the drawing program first (in Inkscape: Path › Object to Path).</p>
+</section>
+
+<section id="exportar">
+  <h2>Export STL and Export STL per object</h2>
+  <p><b>Export STL</b> joins everything in the project (or just the selection) into a <b>single file</b>, with the holes already applied: it is what most prints use. <b>Export STL per object…</b> writes <b>one file per object</b>, all with the same bed origin: opening them together in the slicer (Cura, PrusaSlicer, Bambu Studio), the parts are reassembled in the right place, and you can give each one a different color, filament or setting (multicolor or multi-material printing).</p>
+</section>
+
+<section id="preferencias">
+  <h2>Preferences</h2>
+  <p>The <b>Preferences</b> menu keeps choices that apply to every project:</p>
+  <ul>
+    <li><b>Move by dragging the part</b> (on by default): like in Tinkercad, just <b>drag the part</b> with the left button to slide it over the plane it sits on (X and Y), and the <b>black arrow on top</b> moves it up and down (Z). The move step in the bottom bar applies to both. Dragging a part that is not selected selects and moves it. With this option on, the colored arrow gizmo does not appear. <b>Off</b>, the part only moves with the gizmo.</li>
+    <li><b>Handles on the middle of the sides</b>: also shows resize handles in the middle of each side (by default, only corners and top).</li>
+    <li><b>Bed size</b>: 200, 220, 256 or 300 mm.</li>
+    <li><b>Language</b>: Português or English (the whole program and the manual change right away).</li>
+  </ul>
+</section>
+
+<section id="operacoes">
+  <h2>Operations in progress</h2>
+  <p>Only one operation is open at a time (align, mirror, join faces, face to bed, fillet/chamfer, mesh editing, picking a point). Starting another one ends the previous: those that apply right away (align, mirror) are just closed; those waiting for confirmation (fillet, join faces, face to bed) are cancelled. Clicking outside the part and its control points, pressing <kbd>Esc</kbd> or using another toolbar command also ends the operation. If the operation's part stops existing (deleted or undone), the operation is cancelled, leaving no arrows or dots behind.</p>
+</section>
+
+<section id="variosobjetos">
+  <h2>Several parts at once</h2>
+  <p>With more than one part selected (<kbd>Shift</kbd>+click, area selection or <kbd>Ctrl</kbd>+<kbd>A</kbd>), almost everything applies to the set: moving and rotating with the gizmo, color, solid/hole, opacity, rotating around a point, mirroring, aligning, dropping to the bed and also <b>resizing</b>. The <b>white handles</b> and the <b>dimensions</b> appear around the whole selection, as if it were a single part (<kbd>Shift</kbd> keeps proportions), and the panel shows the <b>selection position</b> and <b>size</b>, with a keep-proportions option and a <b>scale in %</b> field. The parts grow together, keeping the distances between them proportional. If some parts are rotated at angles that are not multiples of 90°, the scale is applied equally on all three axes so they do not get distorted.</p>
+</section>
+
+<section id="espelharmodo">
+  <h2>Mirror</h2>
+  <p>With one or more parts selected, use <b>Mirror</b> (<kbd>M</kbd>, the toolbar button or <b>Object › Mirror</b>). Three <b>double arrows</b> appear around the selection: <b>red</b> for X, <b>green</b> for Y and <b>blue</b> for Z. Hovering turns the arrow yellow; clicking flips the selection on that axis, around its own center. The panel has the same three buttons. You can mirror several times; <b>Done</b> or <kbd>Esc</kbd> leaves.</p>
+</section>
+
+<section id="alinhar">
+  <h2>Align</h2>
+  <p>Select two or more objects and use <b>Align</b> (<kbd>L</kbd>, the toolbar button or the panel). <b>Black dots</b> appear around the selection, like in Tinkercad: three at the front (left, center, right, in X), three on the right side (front, center, back, in Y) and three on a vertical post (bottom, middle, top, in Z). Hovering a dot turns it yellow and the parts already show where they will go; clicking applies the alignment. For each axis the panel shows three options: minimum, center and maximum (left/center/right in X, front/center/back in Y, bottom/center/top in Z).</p>
+  <ul>
+    <li><b>With no reference</b>, each object goes to the <b>average</b> of the objects at that point.</li>
+    <li><b>Clicking one of the objects</b> makes it the reference (highlighted in blue) and it does not move; the black dots move around it and the others align to it. Click it again to go back to the average.</li>
+  </ul>
+  <p>Parts attached by a joint are left out (the joint is in charge of them). <b>Done</b> or <kbd>Esc</kbd> leaves.</p>
+</section>
+
+<section id="selarea">
+  <h2>Area selection</h2>
+  <p>Drag with the left button starting on an empty spot of the view: a rectangle appears and, when you release, the objects <b>entirely</b> inside it are selected. <kbd>Shift</kbd> adds to the current selection; <kbd>Ctrl</kbd> removes.</p>
+  <p>In <b>Edit triangles and vertices</b> mode the rectangle works anywhere and marks the triangles (only those facing the camera; with <kbd>Alt</kbd>, also the back ones) or the vertices inside it. <kbd>Ctrl</kbd> unmarks.</p>
+</section>
+
+<section id="consolidar">
+  <h2>Consolidate and parts library</h2>
+  <p>Complex parts, with many groups, holes and fillets, get heavy because Anvil3D redoes the operations on every change. <b>Consolidate</b> (<kbd>Ctrl</kbd>+<kbd>K</kbd>) merges the selection (or everything, with no selection) into a <b>single part</b>: the final result, ready, light to move, rotate, combine and export.</p>
+  <ul>
+    <li>The consolidated part's origin is at the base center, like the basic shapes.</li>
+    <li>The full <b>recipe</b> is kept inside it. <b>Back to recipe</b> gives back all the original objects, editable, wherever the part is now.</li>
+    <li>Loose holes (outside groups) are left out, as in the export.</li>
+    <li>The consolidated part is a mesh: it can be simplified, repaired and exported like any other.</li>
+  </ul>
+  <h3>Parts library</h3>
+  <p><b>Save to library</b> stores the selected object (consolidated or not) as a reusable part in <code>Documents\Anvil3D\pecas</code>. It appears in the list on the left under <b>My parts</b>: one click inserts it into any project, ready, without redoing the steps. The recipe goes with it, so <b>Back to recipe</b> also works on an inserted part.</p>
+  <p><b>Open parts folder</b> shows the <code>.nvl3dpeca</code> files: to delete or rename a part, change it directly in the folder and click <b>Reload</b>.</p>
+</section>
+
+<section id="juntar">
+  <h2>Join faces and joints</h2>
+  <p>Places a face of the selected object against a face of another object and keeps them <b>attached</b>: afterwards you keep moving the part over the other without undoing the joint.</p>
+  <ol>
+    <li>Select the object that will move.</li>
+    <li>Press <kbd>J</kbd> (or the <b>Join faces</b> button).</li>
+    <li>Hover over your object: the face lights up in <span class="cor" style="background:#e0a100"></span>yellow. Click the face that will touch.</li>
+    <li>Hover over the other object: the face lights up in <span class="cor" style="background:#2e9b4e"></span>green. Click the target face. The part rotates as little as needed and touches with the centers aligned (with <kbd>Ctrl</kbd> it only touches, keeping its side position).</li>
+    <li><b>Optional, align edges:</b> the edges of both parts appear. Click an edge of the attached part and then an edge of the other: the part spins on the face until the edges are parallel and slides until they are on the same line. <kbd>Esc</kbd> skips this step.</li>
+  </ol>
+  <h3>Working with the attached part</h3>
+  <ul>
+    <li><b>Slide:</b> drag the part with the mouse. It moves over the other part's surface, goes from one face to another and follows curves (the side of a cylinder, for example), always in contact.</li>
+    <li><b>Follow:</b> if the supporting part moves or rotates, the attached part goes along. Chains work (A attached to B attached to C).</li>
+    <li><b>Resize:</b> when the size or parameters of the attached part change, the contact face stays in contact and it grows away from the other.</li>
+    <li><b>Moving and rotating the attached part:</b> in <b>move mode</b>, dragging the part slides it over the other. Click it again (or <kbd>R</kbd>) for <b>rotate mode</b>: dragging the part itself (or the ring, shown in its middle) spins it on the face, around the contact normal, and the joint remains. The panel highlights which mode is active.</li>
+    <li><b>Spin on face</b> rotates the part around the contact normal (±15° and ±90° buttons). <b>Offset</b> leaves a gap (positive) or an interference (negative) in mm.</li>
+    <li><b>Align edges</b> repeats the optional step at any time.</li>
+    <li><b>Release joint</b> (in the panel, in <b>Object › Release joint</b> or <kbd>Shift</kbd>+<kbd>J</kbd>, for all selected parts) frees the part where it is; it gets the gizmo and the position and rotation fields back.</li>
+    <li><b>Live preview:</b> while you move, rotate or resize the supporting part (with the gizmo or the handles), the parts attached to it already follow on screen, before you release the mouse.</li>
+  </ul>
+  <p><b>Attached hole:</b> when a hole is attached to a solid by a joint (or the other way round), the area of the solid that the hole will cut is shown in a <b>darker</b> shade of the solid's color, even before grouping.</p>
+  <p>While attached, the part does not show position, absolute rotation, rotate around a point and mirror: the joint is in charge. If the supporting part is grouped or deleted, the joint stays frozen and applies again when it comes back.</p>
+  <p>With several objects selected, Join faces moves them all together, but without creating a joint. Joining a part that was already attached again replaces the old joint with the new one. Two parts cannot be attached to each other both ways (nor in a circle, A on B on C on A): the program warns and asks you to release one first. You can join onto any part, including groups, parts with fillets/chamfers and meshes.</p>
+</section>
+
+<section id="arestas">
+  <h2>Fillet and chamfer</h2>
+  <p>Select an object and click <b>Fillet…</b> or <b>Chamfer…</b> under <b>Round edges</b>.</p>
+  <ul>
+    <li>The available edges are drawn; the one under the mouse lights up in bright yellow.</li>
+    <li><b>Continuous line</b> (on by default): one click marks the whole line as long as it continues without a sharp bend (up to 35° at each joint), like the curved rim of a cut made of many segments; hovering lights up the whole line before you click. <kbd>Alt</kbd>+click takes a single segment.</li>
+    <li><b>Follow tangents</b> (on by default): the finish continues by itself along edges that join without a bend (up to 12°), like a straight edge turning into a curve. That way it does not stop in the middle of a curve with a triangular step at the end. Turn it off to finish only the marked edges.</li>
+    <li><b>Brush:</b> hold the button and move over the edges to mark them one by one; if the first edge you touch was already marked, the brush unmarks.</li>
+    <li>Clicking marks or unmarks. Shortcuts: <b>All</b>, <b>Top</b>, <b>Vertical</b> and <b>None</b> (top and vertical follow the object's own axes).</li>
+    <li>Type the <b>Radius</b> (fillet) or the <b>Distance</b> (chamfer). The preview shows in <span class="cor" style="background:#d63a2f"></span>red the material removed and in <span class="cor" style="background:#2e9b4e"></span>green what is added in inner corners.</li>
+    <li><b>Apply</b> (<kbd>Enter</kbd>) confirms; <b>Cancel</b> (<kbd>Esc</kbd>) leaves without changing anything.</li>
+  </ul>
+  <h3>Still editable</h3>
+  <p>The finish becomes an item of its own. Selecting it you can switch between fillet and chamfer, change the size, <b>Edit edges</b>, change the parameters of the shape inside (the finish follows) or <b>Remove</b> it. <b>Another finish on top</b> lets you combine, for example, fillets on the vertical edges and a chamfer on the top.</p>
+  <p>If a change makes an edge disappear, a yellow warning appears and everything else keeps working.</p>
+  <div class="nota">It works on straight edges (at any angle) and on circular edges: cylinder top, hole rim and cone. Free curved edges (like a spherical hole cutting a cylinder) are split into very short straight segments; with the continuous line they are marked at once, and the finish is made as a <b>continuous sweep</b> along the whole line, with no teeth at the joints. Along the line, the face directions are smoothed so the profile does not "shake" on faceted surfaces (spheres, cylinders). Where faces meet at a very sharp angle, the fillet's reach is limited to 3× the radius so it does not eat the faces, and the panel <b>warns</b> how many of the marked edges have an angle under 35°: there the result tends to be uneven, so use a smaller radius, a chamfer, or leave those edges out. If the part's edge already has steps (for example, a twisted extrusion with few slices), the fillet follows the steps. Where three fillets meet, the corner keeps a small peak.</div>
+</section>
+
+<section id="malha">
+  <h2>Mesh: triangles and vertices</h2>
+  <p>To edit triangles and vertices, the object must be a <b>mesh</b>. There are two ways:</p>
+  <ul>
+    <li><b>Convert to editable mesh</b>, in any object's panel. The parametric version is kept: <b>Back to parametric</b> restores it, discarding the mesh edits.</li>
+    <li><b>Import STL</b> (<kbd>Ctrl</kbd>+<kbd>I</kbd>): the mesh arrives centered and resting on the bed.</li>
+  </ul>
+  <h3>Edit triangles and vertices</h3>
+  <p>In <b>Triangles</b> mode, clicking marks or unmarks. <b>Flat face</b> expands the selection to every neighbor on the same plane; <b>Invert</b> and <b>None</b> help adjust it. <b>Delete triangles</b> (<kbd>Del</kbd>) removes the marked ones.</p>
+  <p>In <b>Vertices</b> mode, clicking selects a vertex and <kbd>Shift</kbd>+click adds others. Move them with the gizmo (following the move step) or type the position with 3 decimal places. With several vertices, the field moves the group's center. Coordinates are local to the object.</p>
+  <p><b>Done</b> or <kbd>Esc</kbd> leaves the mode. Every operation goes into undo.</p>
+  <h3>Open mesh</h3>
+  <p>Deleting triangles leaves holes. An open mesh is shown and exported normally, but <b>it cannot go into groups and holes</b>. Use <b>Close holes</b>, which caps each opening with a fan from the center of its outline (best for flat holes).</p>
+</section>
+
+<section id="simplificar">
+  <h2>Simplifying meshes</h2>
+  <p>Available in any mesh's panel and inside edit mode.</p>
+  <ul>
+    <li><b>Keep (% of triangles)</b>: the target. 50 keeps half.</li>
+    <li><b>Max deviation (mm)</b>: if greater than zero, simplification stops before the target when it would distort the part beyond that amount. A good value for printing: 0.05 to 0.1 mm.</li>
+    <li><b>Lock open borders</b>: keeps hole outlines intact.</li>
+  </ul>
+  <p>The algorithm (meshoptimizer) removes triangles from flat regions first and keeps the details. The status bar shows how many triangles remain and the actual deviation.</p>
+</section>
+
+<section id="reparo">
+  <h2>Repair for printing</h2>
+  <p>STL files downloaded from the internet or coming from other programs often have defects that make the slicer fail: missing walls, disappearing layers or hollow parts. Every mesh shows a <b>3D printing</b> section in the panel with the diagnosis:</p>
+  <table>
+    <tr><th>Item</th><th>What it means</th></tr>
+    <tr><td>Holes</td><td>Edges used by a single triangle: the part is not closed and the slicer cannot tell inside from outside.</td></tr>
+    <tr><td>Edges with more than two faces</td><td>"Non-manifold" geometry, like two parts touching along an edge or glued walls.</td></tr>
+    <tr><td>Flipped normals</td><td>Triangles facing inward; the slicer may treat the region as empty.</td></tr>
+    <tr><td>Duplicate triangles</td><td>Faces repeated in the same place.</td></tr>
+    <tr><td>Separate pieces</td><td>More than one shell in the file. Not an error, but overlapping shells get in the way of slicing.</td></tr>
+  </table>
+  <p><b>Repair for printing</b> does, in order: welds duplicate vertices, removes degenerate and duplicate triangles, removes faces on malformed edges, fixes the normals' orientation (all facing out), closes holes, removes tiny loose pieces and merges overlapping shells into one body. The status bar shows the report of what was fixed.</p>
+  <ul>
+    <li><b>Close holes</b>: caps each opening from the center of its outline.</li>
+    <li><b>Merge overlapping pieces</b>: fuses shells that cross each other, as the slicer expects.</li>
+    <li><b>Remove loose pieces smaller than</b>: cleans junk and fragments (0 turns it off).</li>
+  </ul>
+  <p>When you import an STL, Anvil3D warns right away if it has problems. When exporting, it also warns if any mesh needs repair or if the part is not resting on the bed (Z = 0).</p>
+  <div class="nota">Parametric parts (shapes, groups, finishes) always come out closed and correct; repair is for imported or edited meshes. Self-intersections within a single shell and very twisted holes may need manual work in <b>Edit triangles and vertices</b>.</div>
+</section>
+
+<section id="arquivos">
+  <h2>Files, saving and exporting</h2>
+  <ul>
+    <li><b>Open</b> (<kbd>Ctrl</kbd>+<kbd>O</kbd>) has the <b>places</b> on the left (Anvil3D projects, Documents, Desktop, home folder, drives) and the <b>recent</b> projects; in the middle, the folders and <code>.nvl3d</code> projects of the current folder (click a folder to enter it, the path trail to go back); on the right, the large <b>preview</b>, date, number of objects and the project <b>description</b>, with the Open and Cancel buttons. Double-clicking a project also opens it. The thumbnail is stored in the project itself when saving.</li>
+    <li><b>Save as</b> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) and the first <b>Save</b> of a new project use the same window: folders on the left, and on the right the project preview, the <b>file name</b> and the <b>description</b>, which can be edited right there (in Save as it comes filled with the current project's). Clicking a project in the list uses its name (to replace it, with confirmation). Once the project has a file, <kbd>Ctrl</kbd>+<kbd>S</kbd> saves directly, with no window.</li>
+    <li><b>File › Project properties…</b> stores a short description (what it is for, sizes, material), shown in the Open preview.</li>
+    <li><b>New</b>, <b>Open</b>, <b>Save</b> and <b>Save as</b> work with <code>.nvl3d</code> projects, Anvil3D's official extension. Old <code>.anvil</code> projects still open; when saved, they become <code>.nvl3d</code> with the same name.</li>
+    <li>The file is readable JSON with the whole tree; meshes are stored compressed inside it.</li>
+    <li>When saving, the previous version becomes a <code>.bak</code> next to the file.</li>
+    <li>STLs are exported in <b>bed coordinates</b> (origin at the corner), without recentering: parts keep their relative positions. <b>Export STL per object…</b> writes one file per object into a folder, all with the same origin; opening them together in the slicer (in PrusaSlicer/Orca, accept loading them as one multi-part object) they reassemble on their own, great for multicolor printing.</li>
+    <li>When you import an STL that already fits on the bed, it stays where it was; others arrive centered on the bed.</li>
+    <li>Projects from earlier versions (with the origin in the middle of the bed) are adjusted when opened, without changing where the parts sit on the bed.</li>
+    <li><b>Export STL</b> (<kbd>Ctrl</kbd>+<kbd>E</kbd>) exports the selection or, with no selection, everything. Solids are merged into one body; loose holes are left out. If there is an open mesh, the parts are exported side by side without merging, with a warning.</li>
+    <li><b>Copy/Paste</b> (<kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd>) works between Anvil3D windows, keeping parameters and history.</li>
+    <li>When closing with changes, the program asks whether to save.</li>
+  </ul>
+  <p>Projects and plugins are stored by default in <code>Documents\Anvil3D</code>.</p>
+</section>
+
+<section id="historico">
+  <h2>Undo and safety</h2>
+  <p><kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes and <kbd>Ctrl</kbd>+<kbd>Y</kbd> redoes, up to 300 steps. Moving, changing parameters, grouping, applying fillets and editing meshes all go into the history.</p>
+  <p>If a plugin used in a project is not installed, the object appears in red, but its data stays in the file. When the plugin is reinstalled, the part comes back.</p>
+</section>
+
+<section id="ajustes">
+  <h2>Status bar settings</h2>
+  <p><b>Move step</b>: the snap when dragging and when moving with the keyboard arrows (free, 0.1 to 10 mm).</p>
+  <p><b>Rotation step</b>: the snap when rotating with the gizmo rings (free, 1° to 90°).</p>
+  <p><b>Curve resolution</b>: how many segments cylinders, spheres and arcs have. <i>Draft</i> is faster while modeling; <i>fine</i> gives smoother surfaces in the STL. Shapes with a set number of sides do not change.</p>
+  <p>These settings are kept from one session to the next.</p>
+</section>
+
+<section id="idioma">
+  <h2>Language</h2>
+  <p>Anvil3D works in Portuguese (default) and English. Change it in <b>Preferences › Português / English</b>. The whole interface and this manual switch immediately, without closing the project, and the choice is remembered. Numbers follow the language: comma as decimal separator in Portuguese, point in English (fields accept both).</p>
+  <p>Names you gave to objects are not translated. Built-in shapes appear in the chosen language; your plugins can also provide English names (see Writing plugins).</p>
+</section>
+
+<section id="atalhos">
+  <h2>Keyboard shortcuts</h2>
+  <table>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd> / <kbd>O</kbd> / <kbd>S</kbd></td><td>New, open, save</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Save as</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd> / <kbd>Ctrl</kbd>+<kbd>I</kbd></td><td>Export STL / import STL</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Undo / redo</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>V</kbd> / <kbd>D</kbd></td><td>Copy, paste, duplicate</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>G</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd></td><td>Group / ungroup</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>Consolidate</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd></td><td>Select all</td></tr>
+    <tr><td><kbd>Del</kbd></td><td>Delete (in mesh mode: delete triangles)</td></tr>
+    <tr><td><kbd>H</kbd></td><td>Toggle solid/hole</td></tr>
+    <tr><td><kbd>J</kbd> / <kbd>Shift</kbd>+<kbd>J</kbd></td><td>Join faces / release joint</td></tr>
+    <tr><td><kbd>B</kbd></td><td>Face to bed</td></tr>
+    <tr><td><kbd>R</kbd></td><td>Gizmo: toggle move and rotate</td></tr>
+    <tr><td><kbd>L</kbd></td><td>Align</td></tr>
+    <tr><td><kbd>M</kbd></td><td>Mirror</td></tr>
+    <tr><td><kbd>T</kbd></td><td>Show triangles</td></tr>
+    <tr><td><kbd>F</kbd> / <kbd>Home</kbd></td><td>Fit all / isometric view</td></tr>
+    <tr><td>Arrows, <kbd>Ctrl</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd></td><td>Move in X/Y, in Z</td></tr>
+    <tr><td><kbd>Enter</kbd></td><td>Apply fillet/chamfer</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>Cancel the tool or clear the selection</td></tr>
+    <tr><td><kbd>F1</kbd></td><td>This manual</td></tr>
+    <tr><td><kbd>F12</kbd></td><td>Developer console (for plugins)</td></tr>
+  </table>
+</section>
+
+<section id="plugins">
+  <h2>Writing plugins</h2>
+  <p>Every shape in the library is a plugin: a <code>.mjs</code> file. Yours live in <code>Documents\Anvil3D\plugins</code> (subfolders work). <b>Open plugins folder</b> takes you there, and <b>Reload</b> reads them again without restarting. The folder has an example (Washer) and the <code>LEIA-ME.md</code> file with the full contract.</p>
+<pre>export default {
+  api: 1, id: 'my.bracket', nome: 'Suporte', categoria: 'Meus plugins', icone: '⌐',
+  en: { nome: 'Bracket', categoria: 'My plugins', rotulos: { largura: 'Width' } },
+  parametros: [ { chave: 'largura', rotulo: 'Largura', padrao: 30, min: 1 } ],
+  gerar(p, { Manifold, CrossSection, segmentos }) {
+    return Manifold.cube([p.largura, 10, 10], true).translate([0, 0, 5]);
+  },
+};</pre>
+  <p>The field names of the contract are in Portuguese (<code>nome</code> = name, <code>categoria</code> = category, <code>parametros</code> = parameters, <code>chave</code> = key, <code>rotulo</code> = label, <code>padrao</code> = default, <code>gerar</code> = generate). The optional <code>en</code> block gives the English texts: <code>nome</code>, <code>categoria</code>, <code>descricao</code>, <code>rotulos</code> (label per parameter key) and <code>opcoes</code> (label per option value).</p>
+  <p>Parameter types: number (with <code>min</code>, <code>max</code>, <code>inteiro</code> for integer), <code>booleano</code> (checkbox), <code>opcao</code> (choice), <code>texto</code> (text) and <code>pontos</code> (points). A plugin of yours with the same <code>id</code> as a built-in one replaces it. Do not change the <code>id</code> after using the plugin in projects.</p>
+  <h3>Create shapes with any AI</h3>
+  <p><b>Help › Create shapes with AI…</b> shows a ready-made request with every rule of the contract, the API and a full example. Copy it, paste it into any AI (Claude, ChatGPT, Gemini…), describe the shape you want at the end and save the answer as a <code>.mjs</code> file in the plugins folder. If you paste the whole answer, with the AI's text and the <code>```</code> marks around the code, Anvil3D uses only the code; if the AI exports the plugin under another name instead of <code>export default</code>, it is accepted too. The same text is in <code>GENERATE-SHAPES-WITH-AI.md</code> (and in Portuguese in <code>GERAR-FORMAS-COM-IA.md</code>) in the plugins folder.</p>
+  <p>Plugin errors appear in red below the shape list. <kbd>F12</kbd> opens the console.</p>
+</section>
+
+<section id="problemas">
+  <h2>Troubleshooting</h2>
+  <h3>Red wireframe object</h3>
+  <p>Generation failed. Select it and read the message in the panel: usually it is an impossible size (hole larger than the part) or a missing plugin.</p>
+  <h3>"Open mesh" when grouping</h3>
+  <p>Select the mesh and use <b>Close holes</b>.</p>
+  <h3>Edge not found warning</h3>
+  <p>After a big change, the fillet could not find the original edge. Select the finish and use <b>Edit edges</b>.</p>
+  <h3>The 3D view does not appear</h3>
+  <p>Update your video driver. Anvil3D needs WebGL.</p>
+  <h3>Windows warning when opening</h3>
+  <p>The executable is not digitally signed. Click <i>More info</i> and then <i>Run anyway</i>.</p>
+</section>
+
+<footer class="assinatura">Anvil3D · © 2026 Luiz Pacheco · GPL-3.0 · <a href="mailto:luizgpf@gmail.com" target="_blank">luizgpf@gmail.com</a> · <a href="https://nobetteridea.com" target="_blank">nobetteridea.com</a> · <a href="https://github.com/lgpf/anvil3d" target="_blank">github.com/lgpf/anvil3d</a> · <a href="https://ko-fi.com/anvil3d" target="_blank">♥ Support Anvil3D on Ko-fi</a></footer>
+</main>
+
+</body>
+</html>

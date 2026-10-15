@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' app:; script-src 'self' app: 'wasm-unsafe-eval' 'sha256-d4JC76Vzm4IRrm7aSRtLV3WLUBQk8MzIQDiYiFFGxPg='; style-src 'self' app: 'unsafe-inline'; img-src 'self' app: data: blob:">
+<title>Anvil3D</title>
+<link rel="icon" href="icone.png">
+<link rel="stylesheet" href="estilo.css">
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three.module.js",
+  "three/addons/": "./vendor/addons/"
+} }
+</script>
+</head>
+<body>
+<header id="barra">
+<nav class="menus">
+  <div class="menu">
+    <button class="menu-titulo">Arquivo</button>
+    <div class="menu-itens" hidden>
+      <button data-cmd="novo"><span>Novo</span><kbd>Ctrl+N</kbd></button>
+      <button data-cmd="abrir"><span>Abrir…</span><kbd>Ctrl+O</kbd></button>
+      <button data-cmd="salvar"><span>Salvar</span><kbd>Ctrl+S</kbd></button>
+      <button data-cmd="salvarComo"><span>Salvar como…</span><kbd>Ctrl+Shift+S</kbd></button>
+      <button data-cmd="propriedades"><span>Propriedades do projeto…</span></button>
+      <hr>
+      <button data-cmd="importarStl"><span>Importar STL…</span><kbd>Ctrl+I</kbd></button>
+      <button data-cmd="importarSvg"><span>Importar SVG…</span></button>
+      <button data-cmd="exportarStl"><span>Exportar STL…</span><kbd>Ctrl+E</kbd></button>
+      <button data-cmd="exportarStlPorObjeto"><span>Exportar STL por objeto…</span></button>
+      <hr>
+      <button data-cmd="abrirPastaPecas"><span>Pasta de peças</span></button>
+      <button data-cmd="abrirPastaPlugins"><span>Pasta de plugins</span></button>
+    </div>
+  </div>
+  <div class="menu">
+    <button class="menu-titulo">Editar</button>
+    <div class="menu-itens" hidden>
+      <button data-cmd="desfazer"><span>Desfazer</span><kbd>Ctrl+Z</kbd></button>
+      <button data-cmd="refazer"><span>Refazer</span><kbd>Ctrl+Y</kbd></button>
+      <hr>
+      <button data-cmd="recortar"><span>Recortar</span><kbd>Ctrl+X</kbd></button>
+      <button data-cmd="copiar"><span>Copiar</span><kbd>Ctrl+C</kbd></button>
+      <button data-cmd="colar"><span>Colar</span><kbd>Ctrl+V</kbd></button>
+      <hr>
+      <button data-cmd="duplicar"><span>Duplicar</span><kbd>Ctrl+D</kbd></button>
+      <button data-cmd="excluir"><span>Excluir</span><kbd>Del</kbd></button>
+    </div>
+  </div>
+  <div class="menu">
+    <button class="menu-titulo">Objeto</button>
+    <div class="menu-itens" hidden>
+      <button data-cmd="alternarGizmo"><span>Alternar mover / girar</span><kbd>R</kbd></button>
+      <button data-cmd="juntarFaces"><span>Juntar faces</span><kbd>J</kbd></button>
+      <button data-cmd="soltarJuncao"><span>Soltar junção</span><kbd>Shift+J</kbd></button>
+      <button data-cmd="faceNaMesa"><span>Face na mesa</span><kbd>B</kbd></button>
+      <button data-cmd="alinhar"><span>Alinhar</span><kbd>L</kbd></button>
+      <button data-cmd="espelharModo"><span>Espelhar</span><kbd>M</kbd></button>
+      <button data-cmd="aplicarFace"><span>Aplicar na face…</span></button>
+      <button data-cmd="projetar"><span>Projetar na superfície</span></button>
+      <hr>
+      <button data-cmd="agrupar"><span>Agrupar</span><kbd>Ctrl+G</kbd></button>
+      <button data-cmd="desagrupar"><span>Desagrupar</span><kbd>Ctrl+Shift+G</kbd></button>
+      <button data-cmd="alternarFuro"><span>Sólido ⇄ furo</span><kbd>H</kbd></button>
+      <hr>
+      <button data-cmd="consolidar"><span>Consolidar</span><kbd>Ctrl+K</kbd></button>
+    </div>
+  </div>
+  <div class="menu">
+    <button class="menu-titulo">Vista</button>
+    <div class="menu-itens" hidden>
+      <button data-cmd="verTriangulos" id="bt-tri"><span>Mostrar triângulos</span><kbd>T</kbd></button>
+      <hr>
+      <button data-cmd="vistaIso"><span>Isométrica</span><kbd>Home</kbd></button>
+      <button data-cmd="vistaTopo"><span>Topo</span></button>
+      <button data-cmd="vistaFrente"><span>Frente</span></button>
+      <button data-cmd="vistaDireita"><span>Direita</span></button>
+      <hr>
+      <button data-cmd="ajustar"><span>Enquadrar tudo</span><kbd>F</kbd></button>
+    </div>
+  </div>
+  <div class="menu">
+    <button class="menu-titulo">Preferências</button>
+    <div class="menu-itens" hidden>
+      <button data-cmd="moverPeca"><span>Mover arrastando a peça</span></button>
+      <button data-cmd="alcasLaterais"><span>Alças nos meios das laterais</span></button>
+      <hr>
+      <button data-cmd="mesa200"><span>Mesa 200 × 200 mm</span></button>
+      <button data-cmd="mesa220"><span>Mesa 220 × 220 mm</span></button>
+      <button data-cmd="mesa256"><span>Mesa 256 × 256 mm</span></button>
+      <button data-cmd="mesa300"><span>Mesa 300 × 300 mm</span></button>
+      <hr>
+      <button data-cmd="idiomaPt" id="bt-pt"><span lang="pt">Português</span></button>
+      <button data-cmd="idiomaEn" id="bt-en"><span lang="en">English</span></button>
+    </div>
+  </div>
+  <div class="menu">
+    <button class="menu-titulo">Ajuda</button>
+    <div class="menu-itens" hidden>
+      <button data-cmd="ajuda"><span>Manual</span><kbd>F1</kbd></button>
+      <button data-cmd="guiaIA"><span>Criar formas com IA…</span></button>
+      <button data-cmd="sobre"><span>Sobre o Anvil3D</span></button>
+    </div>
+  </div>
+</nav>
+<div class="rapidos">
+  <button data-cmd="desfazer" title="Desfazer (Ctrl+Z)" aria-label="Desfazer">↶</button>
+  <button data-cmd="refazer" title="Refazer (Ctrl+Y)" aria-label="Refazer">↷</button>
+  <span class="divisor"></span>
+  <button data-cmd="alternarGizmo" id="bt-modo" title="Gizmo: mover ou girar (R, ou clique de novo na peça)">✥ Mover</button>
+  <button data-cmd="juntarFaces" title="Encostar uma face do objeto na face de outro (J)">Juntar faces</button>
+  <button data-cmd="faceNaMesa" title="Escolher a face da peça que fica apoiada no plano (B)">Face na mesa</button>
+  <button data-cmd="alinhar" title="Alinhar os objetos selecionados (L)">Alinhar</button>
+  <button data-cmd="espelharModo" title="Espelhar a seleção em X, Y ou Z (M)">Espelhar</button>
+  <span class="divisor"></span>
+  <button data-cmd="agrupar" title="Agrupar (Ctrl+G)">Agrupar</button>
+  <button data-cmd="desagrupar" title="Desagrupar (Ctrl+Shift+G)">Desagrupar</button>
+  <button data-cmd="alternarFuro" title="Alternar sólido/furo (H)">Sólido ⇄ Furo</button>
+  <span class="divisor"></span>
+  <button data-cmd="exportarStl" class="primario" title="Exportar STL (Ctrl+E)">Exportar STL</button>
+</div>
+</header>
+
+<aside id="biblioteca">
+  <div class="cab-painel">
+    <h2>Formas <button class="interrog" data-dica="formas" aria-label="Dica">?</button></h2>
+    <button data-cmd="recarregarPlugins" class="pequeno" title="Ler de novo os plugins do disco">Recarregar</button>
+  </div>
+  <input id="busca-formas" type="search" placeholder="Buscar forma…" spellcheck="false">
+  <div id="lista-formas"><p class="lista-carregando">Carregando formas…</p></div>
+  <div class="rodape-painel">
+    <button data-cmd="abrirPastaPlugins" class="pequeno">Abrir pasta de plugins</button>
+    <button data-cmd="abrirPastaPecas" class="pequeno">Abrir pasta de peças</button>
+    <div id="erros-plugins"></div>
+  </div>
+</aside>
+
+<main id="vista">
+  <div id="aviso-escolha" hidden>Clique num ponto do modelo para usar como pivô · Esc cancela</div>
+</main>
+
+<aside id="propriedades"></aside>
+
+<footer id="status">
+  <span id="msg">Abrindo…</span>
+  <span><button class="interrog" data-dica="passo" aria-label="Dica">?</button>
+  <label>Passo de movimento
+    <select id="passo-mov">
+      <option value="0">livre</option><option value="0.1">0,1 mm</option><option value="0.5">0,5 mm</option>
+      <option value="1" selected>1 mm</option><option value="2">2 mm</option><option value="5">5 mm</option><option value="10">10 mm</option>
+    </select>
+  </label></span>
+  <span><button class="interrog" data-dica="passoGiro" aria-label="Dica">?</button>
+  <label>Passo de giro
+    <select id="passo-giro">
+      <option value="0">livre</option><option value="1">1°</option><option value="5">5°</option>
+      <option value="15">15°</option><option value="45">45°</option><option value="90">90°</option>
+    </select>
+  </label></span>
+  <span><button class="interrog" data-dica="resolucao" aria-label="Dica">?</button>
+  <label>Resolução de curvas
+    <select id="resolucao">
+      <option value="1.5">rascunho</option><option value="0.5" selected>normal</option><option value="0.2">fina</option>
+    </select>
+  </label></span>
+  <span id="tris"></span>
+  <span id="versao"></span>
+</footer>
+<div id="popdica" role="tooltip" hidden><p></p><button class="link">Abrir no manual</button></div>
+<div id="modal" hidden>
+  <div class="caixa-modal" role="dialog" aria-modal="true">
+    <div class="cab-modal"><h2></h2><button data-fechar aria-label="Fechar">Fechar</button></div>
+    <div class="conteudo-modal"></div>
+  </div>
+</div>
+<script type="module" src="principal.mjs"></script>
+</body>
+</html>
