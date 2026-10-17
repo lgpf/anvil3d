@@ -306,6 +306,7 @@ function encerrarModos(manter = null) {
   if (ALN && manter !== 'ALN') sairAlinharObj();
   if (ESP && manter !== 'ESP') sairEspelhar();
   if (AF && manter !== 'AF') sairAplicarFace();
+  if (TX && manter !== 'TX') sairTextura();
   if (E.escolhendoPonto && manter !== 'PONTO') cancelarEscolha();
 }
 // Se a peça de uma operação em andamento sumiu (apagada, desfeita), a operação é cancelada
@@ -318,6 +319,7 @@ function validarModos() {
   if (ALN && E.sel.filter(existe).length < 2) { sairAlinharObj(); cancelou = true; }
   if (ESP && !E.sel.some(existe)) { sairEspelhar(); cancelou = true; }
   if (AF && !existe(AF.id)) { sairAplicarFace(); cancelou = true; }
+  if (TX && !existe(TX.id)) { sairTextura(); cancelou = true; }
   if (ALN) montarPontosAlinhar();
   if (ESP) montarSetasEspelho();
   if (cancelou) mensagem(tr('Operação cancelada: a peça não existe mais.'));
@@ -785,6 +787,79 @@ function contornosDoSvg(texto) {
   if (!contornos.length) throw new Error(tr('o SVG não tem formas que dê para extrudar'));
   return contornos.map(c => c.map(([x, y]) => [Math.round(x * 1000) / 1000, Math.round(y * 1000) / 1000]));
 }
+// ---------- importar imagem (PNG, JPG, GIF, BMP…) → relevo, litofania ou silhueta ----------
+let inputImagem = null;
+function abrirImportarImagem(arquivo = null) {
+  if (!arquivo) {
+    inputImagem ??= el('input', { type: 'file', accept: '.png,.jpg,.jpeg,.gif,.bmp,.webp,image/*', hidden: true });
+    inputImagem.value = ''; inputImagem.onchange = () => { if (inputImagem.files[0]) abrirImportarImagem(inputImagem.files[0]); };
+    document.body.append(inputImagem); inputImagem.click(); return;
+  }
+  const url = URL.createObjectURL(arquivo), img = new Image();
+  img.onerror = () => { URL.revokeObjectURL(url); mensagem(tr('Não foi possível ler a imagem.'), true); };
+  img.onload = () => { URL.revokeObjectURL(url); dialogoImagem(img, arquivo.name.replace(/\.[^.]+$/, '')); };
+  img.src = url;
+}
+function dialogoImagem(img, nome) {
+  const op = { modo: 'relevo', res: 150, largura: 80, altura: 3, base: 1, inverter: false, limiar: 128, suavizar: 1 };
+  const prev = el('canvas', { class: 'prev-imagem' });
+  let cinza = null, W = 0, H = 0;
+  const amostrar = () => {
+    const k = Math.min(1, op.res / Math.max(img.width, img.height)); W = Math.max(2, Math.round(img.width * k)); H = Math.max(2, Math.round(img.height * k));
+    const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.drawImage(img, 0, 0, W, H); // transparente vira branco (fundo)
+    const d = g.getImageData(0, 0, W, H).data; cinza = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) cinza[i] = Math.round(0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]);
+  };
+  const desenharPrev = () => {
+    const esc = Math.max(1, Math.floor(260 / Math.max(W, H))); prev.width = W * esc; prev.height = H * esc;
+    const g = prev.getContext('2d'), im = g.createImageData(W, H);
+    for (let i = 0; i < W * H; i++) {
+      let v = cinza[i];
+      if (op.modo === 'silhueta') { const t = op.inverter ? 255 - v : v; v = t < op.limiar ? 40 : 245; }
+      else if (!op.inverter) v = 255 - v; // a prévia mostra a ALTURA: claro = alto (o escuro da imagem sobe)
+      im.data.set([v, v, v, 255], i * 4);
+    }
+    const c = document.createElement('canvas'); c.width = W; c.height = H; c.getContext('2d').putImageData(im, 0, 0);
+    g.imageSmoothingEnabled = false; g.drawImage(c, 0, 0, prev.width, prev.height);
+    info.textContent = tt`${W} × ${H} pixels → ${fmt(op.largura)} × ${fmt(op.largura * H / W)} mm`;
+  };
+  const info = el('p', { class: 'dica' });
+  const num = (rotulo, chave, min, max, passo) => { const i = el('input', { type: 'number', min, max, step: passo, value: op[chave] }); i.oninput = () => { op[chave] = lerNumero(i.value) ?? op[chave]; desenharPrev(); }; return campo(rotulo, i, true); };
+  const modo = el('select', { onchange: e => { op.modo = e.target.value; Object.assign(op, op.modo === 'litofania' ? { altura: 2.2, base: 0.8 } : op.modo === 'silhueta' ? { altura: 3, base: 0 } : { altura: 3, base: 1 }); montar(); } },
+    ...[['relevo', tr('Relevo (o escuro sobe)')], ['litofania', tr('Litofania (escuro mais grosso)')], ['silhueta', tr('Silhueta (contorno)')]].map(([v, r]) => el('option', { value: v }, r)));
+  const res = el('select', { onchange: e => { op.res = Number(e.target.value); amostrar(); desenharPrev(); } }, ...[80, 120, 150, 200, 300].map(v => el('option', { value: v, selected: v === op.res }, tt`${v} pixels`)));
+  const inv = el('input', { type: 'checkbox', onchange: e => { op.inverter = e.target.checked; desenharPrev(); } });
+  const corpo = el('div', { class: 'linha-imagem' });
+  const montar = () => {
+    corpo.replaceChildren(
+      el('div', {}, prev, info),
+      el('div', { class: 'opcoes-imagem' },
+        campo(tr('Modo'), modo, true), campo(tr('Resolução'), res, true),
+        num(tr('Largura (mm)'), 'largura', 5, 1000, 1),
+        num(op.modo === 'litofania' ? tr('Espessura variável (mm)') : tr('Altura do relevo (mm)'), 'altura', 0.2, 100, 0.1),
+        num(op.modo === 'litofania' ? tr('Espessura mínima (mm)') : tr('Base (mm)'), 'base', 0, 50, 0.1),
+        ...(op.modo === 'silhueta' ? [num(tr('Limiar'), 'limiar', 1, 254, 1)] : []),
+        num(tr('Suavizar'), 'suavizar', 0, 6, 1),
+        campo(tr('Inverter'), inv, true),
+        el('p', { class: 'dica' }, op.modo === 'relevo' ? tr('O escuro sobe e o claro fica baixo (Inverter troca). A prévia mostra a altura: claro = alto. Bom para desenhos, logotipos e placas.')
+          : op.modo === 'litofania' ? tr('Placa fina: o escuro fica mais grosso. Impressa em material claro e posta contra a luz, mostra a foto.')
+          : tr('Só o contorno do que é escuro (abaixo do limiar), extrudado com a altura. Bom para logotipos.'))));
+    desenharPrev();
+  };
+  amostrar(); montar();
+  const criar = () => {
+    const g = registro.obter('imagem'); if (!g) return mensagem(tr('O gerador de imagem não está disponível.'), true);
+    let b = ''; for (let i = 0; i < cinza.length; i += 0x8000) b += String.fromCharCode(...cinza.subarray(i, i + 0x8000));
+    const no = novaForma(g, { ...parametrosPadrao(g), modo: op.modo, largura: op.largura, altura: op.altura, base: op.base, inverter: op.inverter, limiar: op.limiar, suavizar: op.suavizar, px: W, py: H, dados: btoa(b) }, g.cor);
+    no.nome = nome || tr('Imagem'); no.transformacao.posicao = posicaoNova();
+    fecharModal(); novaPecaPreparar();
+    alterar(() => { E.doc.objetos.push(no); E.sel = [no.id]; });
+    mensagem(tt`Imagem importada (${W} × ${H} pixels). Modo, tamanho e alturas continuam editáveis no painel.`);
+  };
+  abrirModal(tr('Importar imagem'), el('div', {}, corpo,
+    el('div', { class: 'botoes' }, el('button', { onclick: fecharModal }, tr('Cancelar')), el('button', { class: 'primario', onclick: criar }, tr('Criar peça')))), true);
+}
 async function importarSvg() {
   novaPecaPreparar();
   const r = await anvil.importarSvg(); if (!r) return;
@@ -805,20 +880,42 @@ async function importarStl() {
   novaPecaPreparar();
   const r = await anvil.importar();
   if (!r) return;
-  let d;
-  try { d = lerStl(new Uint8Array(r.bytes)); } catch (e) { return mensagem(tr('Não foi possível ler o STL: ') + e.message, true); }
-  const b = new THREE.Box3().setFromBufferAttribute(new THREE.BufferAttribute(d.v, 3)), c = b.getCenter(new THREE.Vector3());
-  // se o STL já cabe na mesa (veio de uma mesa de impressora ou do próprio Anvil3D), mantém o lugar dele;
-  // senão, a peça chega centrada e apoiada no meio da mesa. A origem local fica no centro da base.
-  const naMesa = b.min.x >= -0.01 && b.min.y >= -0.01 && b.max.x <= mesaX + 0.01 && b.max.y <= mesaY + 0.01 && (!mesaRedonda || [[b.min.x, b.min.y], [b.max.x, b.min.y], [b.min.x, b.max.y], [b.max.x, b.max.y]].every(([x, y]) => Math.hypot(x - mesaX / 2, y - mesaY / 2) <= mesaX / 2 + 0.01)) && b.min.z >= -0.01;
-  for (let i = 0; i < d.v.length; i += 3) { d.v[i] -= c.x; d.v[i + 1] -= c.y; d.v[i + 2] -= b.min.z; }
-  const no = novaMalha(r.nome, CORES[E.corIdx++ % CORES.length]);
-  no.transformacao.posicao = naMesa ? [arred(c.x), arred(c.y), arred(b.min.z)] : posicaoNova();
-  gravarMalha(no, d);
-  alterar(() => { E.doc.objetos.push(no); E.sel = [no.id]; });
-  enquadrar();
-  const g = diagDe(no);
-  mensagem(tt`${r.nome}: ${fmtInt(d.t.length / 3)} triângulos importados.${g.ok ? tr(' Malha boa para impressão.') : tr(' A malha tem problemas: veja "Impressão 3D" no painel e use Reparar.')}`, !g.ok);
+  importarStls(Array.isArray(r) ? r : [r]);
+}
+// Importa um ou vários STL (do diálogo ou arrastados para a vista), cada um como objeto independente.
+// Vários de uma vez ficam lado a lado no centro da mesa, sem se sobrepor; um só que já cabe na mesa
+// (veio de uma mesa de impressora ou do próprio Anvil3D) mantém o lugar dele.
+function importarStls(arquivos, pontoSoltar = null) {
+  const novos = [], erros = [], avisos = [];
+  for (const r of arquivos) {
+    let d;
+    try { d = lerStl(new Uint8Array(r.bytes)); } catch (e) { erros.push(r.nome + ': ' + e.message); continue; }
+    const b = new THREE.Box3().setFromBufferAttribute(new THREE.BufferAttribute(d.v, 3)), c = b.getCenter(new THREE.Vector3());
+    const naMesa = arquivos.length === 1 && !pontoSoltar && b.min.x >= -0.01 && b.min.y >= -0.01 && b.max.x <= mesaX + 0.01 && b.max.y <= mesaY + 0.01 && (!mesaRedonda || [[b.min.x, b.min.y], [b.max.x, b.min.y], [b.min.x, b.max.y], [b.max.x, b.max.y]].every(([x, y]) => Math.hypot(x - mesaX / 2, y - mesaY / 2) <= mesaX / 2 + 0.01)) && b.min.z >= -0.01;
+    for (let i = 0; i < d.v.length; i += 3) { d.v[i] -= c.x; d.v[i + 1] -= c.y; d.v[i + 2] -= b.min.z; }
+    const no = novaMalha(r.nome, CORES[E.corIdx++ % CORES.length]);
+    gravarMalha(no, d);
+    novos.push({ no, larg: b.max.x - b.min.x, naMesa, c, zmin: b.min.z, tri: d.t.length / 3 });
+  }
+  if (novos.length) {
+    // lado a lado em X, com 5 mm entre as peças, centrados no ponto de soltar (ou no centro da mesa)
+    const total = novos.reduce((s, n) => s + n.larg, 0) + 5 * (novos.length - 1);
+    const centro = pontoSoltar ?? posicaoNova();
+    let x = centro[0] - total / 2;
+    for (const n of novos) {
+      n.no.transformacao.posicao = n.naMesa ? [arred(n.c.x), arred(n.c.y), arred(n.zmin)] : [arred(x + n.larg / 2), arred(centro[1]), 0];
+      x += n.larg + 5;
+    }
+    alterar(() => { for (const n of novos) E.doc.objetos.push(n.no); E.sel = novos.map(n => n.no.id); });
+    enquadrar();
+    for (const n of novos) if (!diagDe(n.no).ok) avisos.push(n.no.nome);
+  }
+  if (novos.length === 1 && !erros.length) {
+    const n = novos[0];
+    mensagem(tt`${n.no.nome}: ${fmtInt(n.tri)} triângulos importados.${!avisos.length ? tr(' Malha boa para impressão.') : tr(' A malha tem problemas: veja "Impressão 3D" no painel e use Reparar.')}`, !!avisos.length);
+  } else if (novos.length || erros.length) {
+    mensagem(tt`${novos.length} STL importado(s).` + (avisos.length ? ' ' + tt`Com problemas de malha: ${avisos.join(', ')}.` : '') + (erros.length ? ' ' + tt`Não lidos: ${erros.join('; ')}` : ''), !!(erros.length || avisos.length));
+  }
 }
 const fmtInt = n => inteiro(n);
 
@@ -1201,6 +1298,35 @@ function pontoLocalAlca(b, chave) {
   return new V3(...p);
 }
 let alcasLaterais = localStorage.getItem('alcasLaterais') === '1';
+// ---------- aviso de versão nova (consulta a última release no GitHub, no máximo uma vez por dia) ----------
+const novaVersao = (a, b) => { const p = v => String(v).replace(/^v/i, '').split(/[.-]/).map(n => parseInt(n, 10) || 0); const x = p(a), y = p(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+async function verificarAtualizacao(manual = false) {
+  if (!manual) {
+    if (localStorage.getItem('checarAtualizacao') === '0') return;
+    const ult = Number(localStorage.getItem('ultimaChecagem') || 0);
+    if (Date.now() - ult < 20 * 3600 * 1000) { const guardada = localStorage.getItem('releaseConhecida'); if (guardada) mostrarAvisoVersao(JSON.parse(guardada)); return; }
+  }
+  if (manual) mensagem(tr('Procurando versão nova…'));
+  const r = await anvil.ultimaRelease?.();
+  localStorage.setItem('ultimaChecagem', String(Date.now()));
+  if (!r?.tag) { if (manual) mensagem(tr('Não foi possível consultar o GitHub agora (sem internet?).'), true); return; }
+  localStorage.setItem('releaseConhecida', JSON.stringify(r));
+  const atual = await anvil.versao?.();
+  if (novaVersao(r.tag, atual)) mostrarAvisoVersao(r, manual);
+  else if (manual) mensagem(tt`Você já está na versão mais nova (${atual}).`);
+}
+async function mostrarAvisoVersao(r, manual = false) {
+  const atual = await anvil.versao?.();
+  if (!novaVersao(r.tag, atual)) return;
+  if (!manual && localStorage.getItem('versaoDispensada') === r.tag) return; // "agora não" vale até sair outra
+  document.querySelector('#aviso-versao')?.remove();
+  const aviso = el('div', { id: 'aviso-versao' },
+    el('span', {}, '⬆ ', tt`Anvil3D ${String(r.tag).replace(/^v/i, '')} disponível (você tem ${atual}).`),
+    el('a', { href: r.url, target: '_blank', class: 'botao-apoio' }, tr('Ver novidades e baixar')),
+    el('button', { onclick: () => { localStorage.setItem('versaoDispensada', r.tag); aviso.remove(); } }, tr('Agora não')));
+  document.body.append(aviso);
+}
+setTimeout(() => { verificarAtualizacao(); document.querySelector('[data-cmd=checarAtualizacao]')?.classList.toggle('ativo', localStorage.getItem('checarAtualizacao') !== '0'); }, 3000);
 setTimeout(() => { document.querySelector('[data-cmd=alcasLaterais]')?.classList.toggle('ativo', alcasLaterais); document.querySelector('[data-cmd=moverPeca]')?.classList.toggle('ativo', localStorage.getItem('moverPeca') !== '0'); }, 0);
 function atualizarAlcas() {
   const a = alvoAlcas();
@@ -2118,6 +2244,206 @@ function confirmarProjecao(A, res, receitaNo = A) {
   mensagem(A.furo ? tr('Peça projetada na superfície como gravação. Agrupe com o destino para cortar.') : tr('Peça projetada na superfície como relevo. Agrupe com o destino para unir. "Voltar à receita" desfaz a projeção.'));
 }
 
+// ---------- textura de superfície (canelado, ondas, recartilhado, hexágonos, tecido, bolinhas, imagem) ----------
+// Escolhe-se as faces (regiões contínuas, que seguem curvas suaves: a lateral de um vaso, sem o lado de
+// dentro nem o fundo); a malha é refinada e os pontos dessas faces são empurrados na direção da superfície
+// conforme o desenho. As bordas da região ficam paradas (a boca do vaso continua lisa). Guarda a receita.
+let TX = null;
+const grupoTX = new THREE.Group(); cena.add(grupoTX);
+const matTX = new THREE.MeshBasicMaterial({ color: 0xe0a100, transparent: true, opacity: 0.45, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, depthWrite: false });
+const PADROES_TEXTURA = [['canelado', 'Canelado (frisos verticais)'], ['ondas', 'Ondas (anéis horizontais)'], ['recartilhado', 'Recartilhado (losangos)'], ['hexagonos', 'Hexágonos'], ['tecido', 'Tecido (cesto)'], ['bolinhas', 'Bolinhas'], ['imagem', 'Imagem (repetida)…']];
+function entrarTextura() {
+  const no = E.sel.length === 1 ? noPorId(E.sel[0]) : null;
+  if (!no || no.furo) return mensagem(tr('Selecione uma peça sólida para aplicar a textura.'), true);
+  let M; try { M = motor.local(no); } catch (e) { return mensagem(e.message, true); }
+  encerrarModos();
+  const g = M.getMesh(), np = g.numProp, V = g.vertProperties, T = g.triVerts, nT = T.length / 3;
+  // normais e vizinhança dos triângulos (para crescer a região pelas curvas suaves)
+  const N = new Float32Array(nT * 3), C = new Float32Array(nT * 3), viz = new Map(), aresta = (a, b) => a < b ? a + ',' + b : b + ',' + a;
+  for (let t = 0; t < nT; t++) {
+    const i = [T[t * 3], T[t * 3 + 1], T[t * 3 + 2]], P = i.map(k => new V3(V[k * np], V[k * np + 1], V[k * np + 2]));
+    const n = P[1].clone().sub(P[0]).cross(P[2].clone().sub(P[0])).normalize(); N.set([n.x, n.y, n.z], t * 3);
+    C.set([(P[0].x + P[1].x + P[2].x) / 3, (P[0].y + P[1].y + P[2].y) / 3, (P[0].z + P[1].z + P[2].z) / 3], t * 3);
+    for (let k = 0; k < 3; k++) { const ch = aresta(i[k], i[(k + 1) % 3]); (viz.get(ch) ?? viz.set(ch, []).get(ch)).push(t); }
+  }
+  TX = { id: no.id, M, g, N, C, viz, aresta, sel: new Set(), padrao: 'canelado', periodo: 4, prof: 0.8, res: 0, imagem: null, timer: 0 };
+  E.sel = []; // sem alças nem setas enquanto escolhe as faces
+  gizmo.detach(); vista.classList.add('escolhendo'); atualizarVisual(); montarPainel();
+  mensagem(tr('Textura: clique nas faces que vão receber a textura (cada clique pega a região contínua; clicar de novo tira). Depois escolha o desenho e Aplicar.'));
+}
+function sairTextura() { if (!TX) return; clearTimeout(TX.timer); for (const o of [...grupoTX.children]) { o.geometry.dispose(); grupoTX.remove(o); } const m = malhas.get(TX.id); if (m) m.visible = true; if (!E.sel.length && noPorId(TX.id)) E.sel = [TX.id]; TX = null; vista.classList.remove('escolhendo'); atualizarVisual(); montarPainel(); desenhar(); }
+function regiaoTX(t0) {
+  const { g, N, viz, aresta } = TX, T = g.triVerts, lim = Math.cos(35 * RAD), reg = new Set([t0]), fila = [t0];
+  while (fila.length) {
+    const t = fila.pop(), i = [T[t * 3], T[t * 3 + 1], T[t * 3 + 2]];
+    for (let k = 0; k < 3; k++) for (const u of viz.get(aresta(i[k], i[(k + 1) % 3])) ?? []) {
+      if (reg.has(u)) continue;
+      if (N[t * 3] * N[u * 3] + N[t * 3 + 1] * N[u * 3 + 1] + N[t * 3 + 2] * N[u * 3 + 2] < lim) continue; // dobra forte: outra face
+      reg.add(u); fila.push(u);
+    }
+  }
+  return reg;
+}
+function desenharSelecaoTX() {
+  for (const o of [...grupoTX.children]) { o.geometry.dispose(); grupoTX.remove(o); }
+  const mo0 = malhas.get(TX.id); if (mo0) mo0.visible = true; // a prévia saiu: a peça original volta a aparecer
+  if (!TX.sel.size) return desenhar();
+  const { g } = TX, np = g.numProp, V = g.vertProperties, T = g.triVerts, pos = [];
+  for (const t of TX.sel) for (let k = 0; k < 3; k++) { const v = T[t * 3 + k]; pos.push(V[v * np], V[v * np + 1], V[v * np + 2]); }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  const m = new THREE.Mesh(geo, matTX), mo = malhas.get(TX.id); mo.updateMatrixWorld(true); m.matrixAutoUpdate = false; m.matrix.copy(mo.matrixWorld);
+  grupoTX.add(m); desenhar();
+}
+function clicarTX(e) {
+  const mo = malhas.get(TX.id), hit = raioDoMouse(e).intersectObject(mo, false)[0];
+  if (!hit) return;
+  const p = mo.worldToLocal(hit.point.clone()), { C } = TX;
+  let melhor = -1, dm = Infinity;
+  for (let t = 0; t < C.length / 3; t++) { const d = (C[t * 3] - p.x) ** 2 + (C[t * 3 + 1] - p.y) ** 2 + (C[t * 3 + 2] - p.z) ** 2; if (d < dm) { dm = d; melhor = t; } }
+  const reg = regiaoTX(melhor), tira = TX.sel.has(melhor);
+  for (const t of reg) tira ? TX.sel.delete(t) : TX.sel.add(t);
+  desenharSelecaoTX(); montarPainel();
+}
+const fr = x => x - Math.floor(x), tri01 = x => 1 - Math.abs(2 * fr(x) - 1);
+function valorPadrao(padrao, u, v, img) {
+  switch (padrao) {
+    case 'canelado': return 0.5 - 0.5 * Math.cos(2 * Math.PI * u);
+    case 'ondas': return 0.5 - 0.5 * Math.cos(2 * Math.PI * v);
+    case 'recartilhado': return Math.min(tri01(u + v), tri01(u - v));
+    case 'hexagonos': { // domos numa grade hexagonal
+      const sx = u, sy = v * 1.1547; let dm = 9;
+      for (const [ox, oy] of [[0, 0], [0.5, 0.5]]) { const cx = Math.round(sx - ox) + ox, cy = Math.round(sy - oy) + oy; dm = Math.min(dm, Math.hypot(sx - cx, (sy - cy) * 0.866)); }
+      return Math.max(0, 1 - (dm / 0.45) ** 2);
+    }
+    case 'tecido': { const i = Math.floor(u), j = Math.floor(v), a = fr(u), b = fr(v); return ((i + j) & 1) ? 0.5 - 0.5 * Math.cos(2 * Math.PI * 2 * a) : 0.5 - 0.5 * Math.cos(2 * Math.PI * 2 * b); }
+    case 'bolinhas': { const d = Math.hypot(fr(u) - 0.5, fr(v) - 0.5); return Math.sqrt(Math.max(0, 1 - (d / 0.42) ** 2)); }
+    case 'imagem': { if (!img) return 0; const x = Math.min(img.w - 1, Math.floor(fr(u) * img.w)), y = Math.min(img.h - 1, Math.floor((1 - fr(v)) * img.h)); return 1 - img.dados[y * img.w + x] / 255; }
+  }
+  return 0;
+}
+// calcula a malha texturizada (no referencial da peça); "res" = tamanho das arestas depois de refinar
+// identidade de cada triângulo que sobrevive ao refinamento: a face de origem (faceID) junto com a malha
+// de origem (originalID) — num tubo, o lado de fora e o de dentro vêm de cilindros diferentes com os
+// mesmos números de face, e sem a origem a textura ia parar nos dois lados
+function chavesFace(g) {
+  const nT = g.triVerts.length / 3, ch = new Float64Array(nT), ri = g.runIndex, ro = g.runOriginalID;
+  for (let r = 0; r < ro.length; r++) for (let t = ri[r] / 3; t < ri[r + 1] / 3; t++) ch[t] = ro[r] * 4294967296 + g.faceID[t];
+  return ch;
+}
+function calcularTextura(res) {
+  const { M, g: g0 } = TX, ch0 = chavesFace(g0), ids = new Set([...TX.sel].map(t => ch0[t]));
+  const R = M.refineToLength(Math.max(0.15, res)), g = R.getMesh(); R.delete();
+  const np = g.numProp, V = Float32Array.from(g.vertProperties), T = g.triVerts, nV = V.length / np, fid = chavesFace(g);
+  const dentro = new Uint8Array(nV), fora = new Uint8Array(nV), nrm = new Float32Array(nV * 3);
+  for (let t = 0; t < T.length / 3; t++) {
+    const a = T[t * 3], b = T[t * 3 + 1], c = T[t * 3 + 2], sel = ids.has(fid[t]);
+    for (const k of [a, b, c]) (sel ? dentro : fora)[k] = 1;
+    if (!sel) continue;
+    const ux = V[b * np] - V[a * np], uy = V[b * np + 1] - V[a * np + 1], uz = V[b * np + 2] - V[a * np + 2], wx = V[c * np] - V[a * np], wy = V[c * np + 1] - V[a * np + 1], wz = V[c * np + 2] - V[a * np + 2];
+    const nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+    for (const k of [a, b, c]) { nrm[k * 3] += nx; nrm[k * 3 + 1] += ny; nrm[k * 3 + 2] += nz; }
+  }
+  // eixo do "cilindro" de mapeamento: centro dos pontos escolhidos; repetições inteiras em volta (sem emenda)
+  let cx = 0, cy = 0, n = 0; for (let k = 0; k < nV; k++) if (dentro[k]) { cx += V[k * np]; cy += V[k * np + 1]; n++; }
+  if (!n) throw new Error(tr('escolha pelo menos uma face'));
+  cx /= n; cy /= n; let R0 = 0; for (let k = 0; k < nV; k++) if (dentro[k]) R0 += Math.hypot(V[k * np] - cx, V[k * np + 1] - cy); R0 /= n;
+  const per = Math.max(0.5, TX.periodo), rep = Math.max(1, Math.round(2 * Math.PI * R0 / per));
+  for (let k = 0; k < nV; k++) {
+    if (!dentro[k] || fora[k]) continue; // borda da região: fica parada (sem rachar a malha)
+    const l = Math.hypot(nrm[k * 3], nrm[k * 3 + 1], nrm[k * 3 + 2]) || 1, nx = nrm[k * 3] / l, ny = nrm[k * 3 + 1] / l, nz = nrm[k * 3 + 2] / l;
+    const x = V[k * np], y = V[k * np + 1], z = V[k * np + 2];
+    let u, v;
+    if (Math.abs(nz) > 0.75) { u = x / per; v = y / per; }                                    // tampo / fundo: plano
+    else { u = (Math.atan2(y - cy, x - cx) / (2 * Math.PI) + 0.5) * rep; v = z / per; }        // laterais: em volta
+    const d = TX.prof * valorPadrao(TX.padrao, u, v, TX.imagem);
+    V[k * np] = x + nx * d; V[k * np + 1] = y + ny * d; V[k * np + 2] = z + nz * d;
+  }
+  const mesh = new wasm.Mesh({ numProp: np, vertProperties: V, triVerts: T });
+  const out = new wasm.Manifold(mesh);
+  if (out.isEmpty()) throw new Error(tr('a textura não formou um sólido válido (diminua a profundidade)'));
+  return out;
+}
+// resolução (tamanho das arestas, mm): 0 = automática — 10 amostras por repetição do desenho, no mínimo
+// 0,15 mm; "limite" = máximo de triângulos na área escolhida (a prévia usa menos, para ser rápida)
+// área da peça inteira (o refinamento vale para a malha toda, não só para as faces escolhidas)
+function areaTX() {
+  const { g } = TX, np = g.numProp, V = g.vertProperties, T = g.triVerts; let a = 0;
+  if (TX.areaTotal) return TX.areaTotal;
+  for (let t = 0; t < T.length / 3; t++) { const i = T[t * 3] * np, j = T[t * 3 + 1] * np, k = T[t * 3 + 2] * np;
+    const ux = V[j] - V[i], uy = V[j + 1] - V[i + 1], uz = V[j + 2] - V[i + 2], wx = V[k] - V[i], wy = V[k + 1] - V[i + 1], wz = V[k + 2] - V[i + 2];
+    a += Math.hypot(uy * wz - uz * wy, uz * wx - ux * wz, ux * wy - uy * wx) / 2; }
+  return (TX.areaTotal = a);
+}
+function resolucaoTX(limite) {
+  const desejada = TX.res > 0 ? TX.res : Math.max(0.15, TX.periodo / 10);
+  const minima = Math.sqrt(4.6 * areaTX() / limite);          // ~ triângulos = 2,3·área/res² (na área escolhida)
+  return Math.max(desejada, minima);
+}
+function agendarPreviaTX(atraso = 250) {
+  if (!TX) return; clearTimeout(TX.timer);
+  if (!TX.sel.size) { desenharSelecaoTX(); return; }
+  TX.timer = setTimeout(() => { try { previaTX(); } catch (e) { console.error('prévia da textura', e); mensagem(e.message, true); } }, atraso);
+}
+function previaTX() {
+  {
+    if (!TX) return;
+    let res; try { res = calcularTextura(resolucaoTX(400000)); } catch (e) { return mensagem(e.message, true); }
+    const d = dadosMalha(res); res.delete();
+    for (const o of [...grupoTX.children]) { o.geometry.dispose(); grupoTX.remove(o); }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(d.posicoes), 3)); geo.setIndex(new THREE.BufferAttribute(new Uint32Array(d.indices), 1)); geo.computeVertexNormals();
+    const mo = malhas.get(TX.id), no = noPorId(TX.id), m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: no.cor, roughness: 0.6 }));
+    mo.updateMatrixWorld(true); m.matrixAutoUpdate = false; m.matrix.copy(mo.matrixWorld); grupoTX.add(m); mo.visible = false; desenhar();
+    mensagem(tr('Prévia (resolução menor). Aplicar calcula na resolução escolhida.'));
+  }
+}
+function aplicarTX() {
+  if (!TX?.sel.size) return mensagem(tr('Clique nas faces que vão receber a textura.'), true);
+  const A = noPorId(TX.id);
+  mensagem(tr('Aplicando a textura…'));
+  const r = resolucaoTX(4000000);
+  let res; try { res = calcularTextura(r); } catch (e) { return mensagem(e.message, true); }
+  const d = deManifold(res); res.delete();
+  sairTextura();
+  alterar(() => {
+    const novo = novaMalha(tt`${A.nome} (textura)`, A.cor);
+    gravarMalha(novo, d); novo.transformacao = structuredClone(A.transformacao);
+    const r = structuredClone(A); definirMatriz(r, new THREE.Matrix4()); novo.receita = [r];
+    E.doc.objetos.splice(E.doc.objetos.indexOf(A), 1, novo); E.sel = [novo.id];
+  });
+  mensagem(tt`Textura aplicada (${fmtInt(d.t.length / 3)} triângulos). "Voltar à receita" desfaz.`);
+}
+function escolherImagemTX() {
+  const i = el('input', { type: 'file', accept: '.png,.jpg,.jpeg,.gif,.bmp,.webp,image/*', hidden: true });
+  i.onchange = () => {
+    const f = i.files[0]; i.remove(); if (!f) return;
+    const url = URL.createObjectURL(f), img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const k = Math.min(1, 128 / Math.max(img.width, img.height)), w = Math.max(2, Math.round(img.width * k)), h = Math.max(2, Math.round(img.height * k));
+      const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.drawImage(img, 0, 0, w, h);
+      const px = g.getImageData(0, 0, w, h).data, dados = new Uint8Array(w * h);
+      for (let j = 0; j < w * h; j++) dados[j] = Math.round(0.299 * px[j * 4] + 0.587 * px[j * 4 + 1] + 0.114 * px[j * 4 + 2]);
+      TX.imagem = { w, h, dados, nome: f.name }; TX.padrao = 'imagem'; montarPainel(); agendarPreviaTX(0);
+    };
+    img.src = url;
+  };
+  document.body.append(i); i.click();
+}
+function painelTextura() {
+  const num = (rotulo, chave, min, max, passo, fim) => { const i = el('input', { type: 'number', min, max, step: passo, value: TX[chave] }); i.onchange = () => { TX[chave] = Math.max(min, Math.min(max, lerNumero(i.value) ?? TX[chave])); i.value = TX[chave]; agendarPreviaTX(); }; return campo(rotulo + (fim ? ` (${fim})` : ''), i); };
+  const padrao = el('select', { onchange: e => { if (e.target.value === 'imagem' && !TX.imagem) { e.target.value = TX.padrao; return escolherImagemTX(); } TX.padrao = e.target.value; agendarPreviaTX(0); } },
+    ...PADROES_TEXTURA.map(([v, r]) => el('option', { value: v, selected: TX.padrao === v }, tr(r))));
+  painel.append(el('h2', {}, tr('Textura')),
+    el('p', { class: 'dica' }, TX.sel.size ? tt`${fmtInt(TX.sel.size)} triângulos escolhidos. Clique em mais faces para somar, ou numa escolhida para tirar.` : tr('Clique nas faces que vão receber a textura. Cada clique pega a região contínua (a lateral de um vaso inteira, sem o lado de dentro nem o fundo).')),
+    campo(tr('Desenho'), padrao),
+    ...(TX.padrao === 'imagem' ? [el('div', { class: 'botoes' }, el('button', { onclick: escolherImagemTX }, TX.imagem ? tt`Imagem: ${TX.imagem.nome}` : tr('Escolher imagem…')))] : []),
+    num(tr('Tamanho do desenho'), 'periodo', 0.5, 100, 0.5, 'mm'),
+    num(tr('Profundidade'), 'prof', -5, 5, 0.1, 'mm'),
+    num(tr('Resolução (0 = automática)'), 'res', 0, 3, 0.05, 'mm'),
+    el('p', { class: 'dica' }, TX.sel.size ? tt`Detalhe: arestas de ${fmt(resolucaoTX(4000000), 2)} mm (prévia: ${fmt(resolucaoTX(400000), 2)} mm). Profundidade positiva sai; negativa entra. A automática usa 10 pontos por repetição do desenho.` : tr('Profundidade positiva sai para fora; negativa entra. A resolução automática usa 10 pontos por repetição do desenho.')),
+    el('div', { class: 'botoes' }, el('button', { class: 'primario', onclick: aplicarTX }, tr('Aplicar')), el('button', { onclick: () => { sairTextura(); mensagem(tr('Textura cancelada.')); } }, tr('Cancelar'))));
+}
+
 function consolidar() {
   const alvo = E.sel.length ? selecionados() : [...E.doc.objetos];
   if (!alvo.some(o => !o.furo)) return mensagem(tr('Nada sólido para consolidar.'), true);
@@ -2556,7 +2882,11 @@ function pivoDaSelecao() {
   // qualquer pivô escolhido (base, canto, origem, ponto) vale só para a seleção em que foi escolhido:
   // trocou de peça, de grupo ou de conjunto selecionado, o giro volta para o centro
   const chave = E.sel.join();
-  if (E.pivoDono !== chave) { E.pivoDono = chave; if (E.pivo !== 'centro') { E.pivo = 'centro'; localStorage.setItem('pivo', 'centro'); } }
+  if (E.pivoDono !== chave) {
+    E.pivoDono = chave; if (E.pivo !== 'centro') { E.pivo = 'centro'; localStorage.setItem('pivo', 'centro'); }
+    // seleção nova (outra peça, Ctrl+A, apagou, desmarcou…) começa sempre em Mover, como no Tinkercad
+    if (E.modoGizmo === 'girar' && !arraste) setTimeout(() => { if (E.modoGizmo === 'girar' && !arraste) definirModoGizmo('mover'); }, 0);
+  }
 }
 // Durante uma sequência de giros da mesma seleção, o pivô fica parado: girar muda a caixa envolvente
 // (alinhada aos eixos), e o centro dela "andava" a cada giro, levando o gizmo junto. O pivô só é
@@ -2611,7 +2941,7 @@ const setaZ = new THREE.Group();
   const pega = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 6), new THREE.MeshBasicMaterial({ visible: false })); pega.position.z = 0.6; // área de pegar maior
   setaZ.add(haste, ponta, pega); setaZ.traverse(o => { o.renderOrder = 60; }); setaZ.visible = false; cena.add(setaZ);
 }
-const podeMoverPeca = () => moverPeca && E.modoGizmo === 'mover' && !MA && !ME && !JF && !AL && !FM && !ALN && !ESP && !AF && !E.escolhendoPonto;
+const podeMoverPeca = () => moverPeca && E.modoGizmo === 'mover' && !MA && !ME && !JF && !AL && !FM && !ALN && !ESP && !AF && !TX && !E.escolhendoPonto;
 function atualizarSetaZ() {
   const ver = podeMoverPeca() && E.sel.length > 0 && !(E.sel.length === 1 && juncaoAtiva(noPorId(E.sel[0])));
   setaZ.visible = ver;
@@ -2694,6 +3024,7 @@ renderer.domElement.addEventListener('pointerup', e => {
   else if (ALN) { if (pontoAlinharSob(e) || (hit && E.sel.includes(hit.object.userData.id))) { clicarALN(e); return; } sairAlinharObj(); mensagem(tr('Alinhar concluído.')); }
   else if (ESP) { if (setaEspelhoSob(e)) { clicarESP(e); return; } sairEspelhar(); mensagem(tr('Espelhar concluído.')); }
   else if (AF) { clicarAF(e); return; }
+  else if (TX) { clicarTX(e); agendarPreviaTX(); return; }
   const id = hit?.object.userData.id;
   if (!id) { if (!e.shiftKey) E.sel = []; }
   else if (e.shiftKey || e.ctrlKey) E.sel = E.sel.includes(id) ? E.sel.filter(x => x !== id) : [...E.sel, id];
@@ -2877,10 +3208,11 @@ gizmo.addEventListener('objectChange', () => {
   atualizarMarcador();
 });
 gizmo.addEventListener('mouseUp', () => {
+  if (arraste?.girar) aplicarPassoGiro(); // volta ao passo da barra depois do giro com passos de 45°
   if (ME) return vertUp();
   cotaMov.hidden = true; limparCotasMov();
   if (!arraste) return;
-  if (arraste.livre) aplicarPassoGiro(); // devolve o encaixe normal dos anéis
+  aplicarPassoGiro(); // devolve o encaixe normal dos anéis
   let mudou = false;
   for (const id of arraste.juncao ? [] : arraste.inicio.keys()) {
     const no = noPorId(id), m = malhas.get(id);
@@ -2901,6 +3233,23 @@ gizmo.addEventListener('mouseUp', () => {
   }
   arraste = null;
 });
+// Giro pelos anéis (X, Y, Z): com o mouse DENTRO do anel o giro anda em passos de 22,5° (22,5, 45, 67,5, 90…);
+// fora do anel, segue o "Passo de giro" da barra (livre, por padrão). Como no Tinkercad.
+window.addEventListener('pointermove', e => {
+  if (!arraste?.girar || !gizmo.dragging || !['X', 'Y', 'Z', 'XYZE', 'E'].includes(gizmo.axis) || gizmo.object !== ajudanteGiro) return;
+  const r = renderer.domElement.getBoundingClientRect(), c = ajudanteGiro.position.clone().project(camera);
+  const cx = r.left + (c.x + 1) / 2 * r.width, cy = r.top + (1 - c.y) / 2 * r.height;
+  const fator = ajudanteGiro.position.distanceTo(camera.position) * Math.min(1.9 * Math.tan(camera.fov * RAD / 2) / camera.zoom, 7) / 4;
+  const raioMundo = 0.5 * fator * gizmo.size, pxPorMM = r.height / (2 * ajudanteGiro.position.distanceTo(camera.position) * Math.tan(camera.fov * RAD / 2));
+  // o anel amarelo (E, de frente para a tela) é maior que os outros: o "dentro" dele vai até a borda dele
+  const dentro = Math.hypot(e.clientX - cx, e.clientY - cy) < raioMundo * pxPorMM * (gizmo.axis === 'E' ? 1.3 : 1.05);
+  const passo = Number($('#passo-giro').value) || 0;
+  if (gizmo.axis === 'XYZE') { // giro livre (esfera): o encaixe é feito por eixo no código abaixo (arraste.livre)
+    arraste.livre = dentro ? 22.5 : passo; gizmo.setRotationSnap(null); return;
+  }
+  const quer = dentro ? 22.5 * RAD : (passo ? passo * RAD : null);
+  if (gizmo.rotationSnap !== quer) { gizmo.setRotationSnap(quer); arraste.passo45 = dentro; }
+}, true);
 function aplicarPassoGiro() { const v = Number($('#passo-giro').value); gizmo.setRotationSnap(v ? v * RAD : null); localStorage.setItem('passoGiro', v); }
 $('#passo-giro').value = localStorage.getItem('passoGiro') ?? '15';
 $('#passo-giro').addEventListener('change', aplicarPassoGiro); aplicarPassoGiro();
@@ -2916,6 +3265,9 @@ motor.definirResolucao(Number($('#resolucao').value));
 
 // ---------- operações ----------
 function adicionarForma(g, pos = null) {
+  // geradores que precisam de um arquivo: o clique na biblioteca abre o arquivo certo
+  if (g.id === 'svg') return importarSvg();
+  if (g.id === 'imagem') return abrirImportarImagem();
   novaPecaPreparar();
   const cor = CORES[E.corIdx++ % CORES.length];
   const no = novaForma(g, parametrosPadrao(g), g.cor || cor);
@@ -3358,7 +3710,7 @@ function atualizarBotoes() {
   const regra = {
     alinhar: n >= 2, juntarFaces: n === 1 && total >= 2, faceNaMesa: n >= 1, espelharModo: n >= 1,
     agrupar: n >= 2, desagrupar: unico?.tipo === 'grupo', alternarFuro: n >= 1, alternarGizmo: n >= 1,
-    duplicar: n >= 1, excluir: n >= 1, copiar: n >= 1, recortar: n >= 1, projetar: n === 2, aplicarFace: n === 1, consolidar: total >= 1,
+    duplicar: n >= 1, excluir: n >= 1, copiar: n >= 1, recortar: n >= 1, projetar: n === 2, aplicarFace: n === 1, textura: n === 1, consolidar: total >= 1,
   };
   for (const b of document.querySelectorAll('[data-cmd]')) { const r = regra[b.dataset.cmd]; if (r !== undefined) b.disabled = !r; }
 }
@@ -3370,6 +3722,7 @@ function montarPainel() {
   if (ALN) return painelAlinhar();
   if (ESP) return painelEspelhar();
   if (AF) return painelAplicarFace();
+  if (TX) return painelTextura();
   const sel = selecionados();
   if (!sel.length) {
     painel.append(el('h2', {}, tr('Nada selecionado'), interrog('nada')),
@@ -3564,6 +3917,7 @@ function montarPainel() {
 // parâmetro com "mostrarSe": { chave: valor | [valores] } só aparece quando o outro parâmetro tem esse valor
 // (ex.: no parafuso, "Medida (métrica)" só com rosca métrica). O valor continua guardado.
 function parametroVisivel(d, no) {
+  if (d.oculto) return false; // guardado na peça, mas não aparece no painel (ex.: os pixels da imagem)
   if (!d.mostrarSe) return true;
   return Object.entries(d.mostrarSe).every(([k, v]) => { const atual = no.parametros?.[k]; return Array.isArray(v) ? v.includes(atual) : atual === v; });
 }
@@ -3826,6 +4180,24 @@ vista.addEventListener('dragover', e => {
   desenhar();
 });
 vista.addEventListener('dragleave', () => { marcaSoltar.visible = false; fantasmaArraste.visible = false; desenhar(); });
+// Arquivos arrastados do Windows: sem isto o Electron "navegava" para o arquivo e trocava a janela inteira
+const temArquivos = e => [...(e.dataTransfer?.types ?? [])].includes('Files');
+window.addEventListener('dragover', e => { if (temArquivos(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+window.addEventListener('drop', async e => {
+  if (!temArquivos(e)) return;
+  e.preventDefault();
+  const arqs = [...e.dataTransfer.files]; if (!arqs.length) return;
+  const ext = f => (f.name.match(/\.([^.]+)$/)?.[1] ?? '').toLowerCase(), nome = f => f.name.replace(/\.[^.]+$/, '');
+  const ponto = e.target.closest?.('#vista') ? pontoDeSoltar(e) : null;
+  const stls = arqs.filter(f => ext(f) === 'stl');
+  if (stls.length) { novaPecaPreparar(); importarStls(await Promise.all(stls.map(async f => ({ nome: nome(f), bytes: new Uint8Array(await f.arrayBuffer()) }))), ponto); }
+  for (const f of arqs.filter(f => ext(f) === 'svg')) { novaPecaPreparar(); criarDeSvg(await f.text(), nome(f)); }
+  const img = arqs.find(f => ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'].includes(ext(f)));
+  if (img) abrirImportarImagem(img);
+  const proj = arqs.find(f => ['nvl3d', 'anvil'].includes(ext(f)));
+  if (proj && !stls.length) { if (await confirmarDescarte()) abrirArquivo({ texto: await proj.text(), caminho: proj.path || proj.name }); }
+  if (!stls.length && !img && !proj && !arqs.some(f => ext(f) === 'svg')) mensagem(tr('Arraste arquivos STL, SVG, imagens (PNG, JPG, GIF, BMP) ou projetos .nvl3d.'), true);
+});
 vista.addEventListener('drop', e => {
   if (!arrastandoForma) return;
   e.preventDefault();
@@ -3901,7 +4273,7 @@ async function carregarPlugins() {
 
 // ---------- comandos e atalhos ----------
 const comandos = {
-  novo, abrir, salvar, salvarComo, exportarStl, importarStl, importarSvg, exportarStlPorObjeto,
+  novo, abrir, salvar, salvarComo, exportarStl, importarStl, importarSvg, exportarStlPorObjeto, importarImagem: () => abrirImportarImagem(),
   mesa200: () => trocarMesa(200), mesa220: () => trocarMesa(220), mesa256: () => trocarMesa(256), mesa300: () => trocarMesa(300),
   mesaPersonalizada: () => pedirMesaPersonalizada(),
   grade1: () => trocarGrade(1), grade25: () => trocarGrade(2.5), grade5: () => trocarGrade(5), grade10: () => trocarGrade(10),
@@ -3916,6 +4288,9 @@ const comandos = {
   alinhar: () => (ALN ? sairAlinharObj() : entrarAlinhar()),
   projetar: () => projetarNaSuperficie(),
   aplicarFace: () => entrarAplicarFace(),
+  textura: () => entrarTextura(),
+  checarAtualizacao: () => { const liga = localStorage.getItem('checarAtualizacao') === '0'; localStorage.setItem('checarAtualizacao', liga ? '1' : '0'); document.querySelector('[data-cmd=checarAtualizacao]')?.classList.toggle('ativo', liga); mensagem(liga ? tr('O Anvil3D vai avisar quando houver versão nova.') : tr('Aviso de versão nova desligado.')); },
+  verificarAgora: () => verificarAtualizacao(true),
   espelharModo: () => (ESP ? sairEspelhar() : entrarEspelhar()),
   alternarGizmo: () => { definirModoGizmo(E.modoGizmo === 'girar' ? 'mover' : 'girar'); montarPainel(); },
   ajuda: () => abrirAjuda(), sobre: abrirSobre, guiaIA: abrirGuiaIA, propriedades: propriedadesProjeto, consolidar, abrirPastaPecas: () => anvil.abrirPastaPecas(),
@@ -3950,7 +4325,7 @@ document.addEventListener('keydown', e => {
     c && k === 'c' ? copiar : c && k === 'v' ? colar : c && k === 'x' ? recortar : c && k === 'a' ? () => { E.sel = E.doc.objetos.map(o => o.id); atualizarVisual(); montarPainel(); } :
     c && k === 'i' ? importarStl : !c && k === 'r' ? comandos.alternarGizmo : !c && e.shiftKey && k === 'j' ? comandos.soltarJuncao : !c && k === 'b' ? comandos.faceNaMesa : !c && k === 'l' ? comandos.alinhar : !c && k === 'm' ? comandos.espelharModo : c && k === 'k' ? consolidar : !c && k === 'j' ? () => { if (!e.repeat) entrarJF(true); } : !c && k === 't' ? comandos.verTriangulos :
     k === 'enter' && AL ? sairAlinhar : k === 'enter' && MA ? aplicarModoAresta : k === 'delete' && ME ? apagarSelecaoME : k === 'delete' && !MA ? excluir : !c && k === 'h' ? alternarFuro : !c && k === 'f' ? () => enquadrar() : k === 'home' ? () => enquadrar('iso') :
-    k === 'escape' ? () => { if (menuAberto) fecharMenu(); else if (E.escolhendoPonto) cancelarEscolha(); else if (FM) { sairFM(); mensagem(tr('Face na mesa cancelado.')); } else if (ALN) sairAlinharObj(); else if (ESP) sairEspelhar(); else if (AF) { sairAplicarFace(); mensagem(tr('Aplicar na face cancelado.')); } else if (AL) { sairAlinhar(); mensagem(tr('Junção mantida sem alinhar arestas. Arraste a peça para deslizar sobre a outra.')); } else if (JF) { sairJF(); mensagem(tr('Juntar faces cancelado.')); } else if (MA) sairModoAresta(); else if (ME) sairME(); else { E.sel = []; atualizarVisual(); montarPainel(); } } :
+    k === 'escape' ? () => { if (menuAberto) fecharMenu(); else if (E.escolhendoPonto) cancelarEscolha(); else if (FM) { sairFM(); mensagem(tr('Face na mesa cancelado.')); } else if (ALN) sairAlinharObj(); else if (ESP) sairEspelhar(); else if (AF) { sairAplicarFace(); mensagem(tr('Aplicar na face cancelado.')); } else if (TX) { sairTextura(); mensagem(tr('Textura cancelada.')); } else if (AL) { sairAlinhar(); mensagem(tr('Junção mantida sem alinhar arestas. Arraste a peça para deslizar sobre a outra.')); } else if (JF) { sairJF(); mensagem(tr('Juntar faces cancelado.')); } else if (MA) sairModoAresta(); else if (ME) sairME(); else { E.sel = []; atualizarVisual(); montarPainel(); } } :
     k === 'arrowleft' ? () => moverTeclado(-1, 0, 0) : k === 'arrowright' ? () => moverTeclado(1, 0, 0) :
     c && k === 'arrowup' ? () => moverTeclado(0, 0, 1) : c && k === 'arrowdown' ? () => moverTeclado(0, 0, -1) :
     k === 'arrowup' ? () => moverTeclado(0, 1, 0) : k === 'arrowdown' ? () => moverTeclado(0, -1, 0) : null);
@@ -3963,7 +4338,7 @@ document.addEventListener('keydown', e => {
 });
 
 // acesso para depuração no console (F12) e testes
-window.__anvil = { get previaAF() { return grupoPreviaAF.children.length; }, orbita, abrirTexto: (texto, caminho) => abrirArquivo({ texto, caminho }), motor, moverPeca: v => { moverPeca = v; atualizarVisual(); }, alcasLaterais: v => { alcasLaterais = v; desenhar(); }, criarDeSvg: (t, n) => criarDeSvg(t, n), mostrarCotas: (chave = 'todas') => { alcaHover = null; cotasAlca = chave; cotasAte = performance.now() + 60000; desenhar(); }, get espelho() { return ESP; }, arrasteAlcaInfo: () => arrasteAlca, serializarComMiniatura: () => serializarComMiniatura(), selecionar: ids => { E.sel = ids; atualizarVisual(); montarPainel(); }, gizmo, grupoAfetado, get alinharObj() { return ALN; }, get alinhar() { return AL; }, get modoMalha() { return ME; }, THREE, camera, cena, grupoArestas, malhas, estado: E, get modoAresta() { return MA; } };
+window.__anvil = { abrirImagem: f => abrirImportarImagem(f), importarStls: (a, p) => importarStls(a, p), get previaAF() { return grupoPreviaAF.children.length; }, orbita, abrirTexto: (texto, caminho) => abrirArquivo({ texto, caminho }), motor, moverPeca: v => { moverPeca = v; atualizarVisual(); }, alcasLaterais: v => { alcasLaterais = v; desenhar(); }, criarDeSvg: (t, n) => criarDeSvg(t, n), mostrarCotas: (chave = 'todas') => { alcaHover = null; cotasAlca = chave; cotasAte = performance.now() + 60000; desenhar(); }, get espelho() { return ESP; }, arrasteAlcaInfo: () => arrasteAlca, serializarComMiniatura: () => serializarComMiniatura(), selecionar: ids => { E.sel = ids; atualizarVisual(); montarPainel(); }, gizmo, grupoAfetado, get alinharObj() { return ALN; }, get alinhar() { return AL; }, get modoMalha() { return ME; }, THREE, camera, cena, grupoArestas, malhas, estado: E, get modoAresta() { return MA; } };
 
 // ---------- idioma ----------
 const originais = new WeakMap();

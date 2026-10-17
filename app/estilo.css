@@ -306,3 +306,5 @@ input.cota.proporcional { outline-color: #2a7fd4; }
 .seletor-cor .sc-paleta { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; margin-top: 8px; }
 .seletor-cor .sc-paleta button { height: 18px; border: 1px solid rgba(0,0,0,.15); border-radius: 3px; padding: 0; cursor: pointer; }
 .seletor-cor .sc-dica { margin-top: 6px; font-size: 11px; opacity: .7; }
+.linha-imagem { display: flex; gap: 16px; align-items: flex-start; } .prev-imagem { max-width: 260px; border: 1px solid var(--linha); image-rendering: pixelated; } .opcoes-imagem { min-width: 260px; }
+#aviso-versao { position: fixed; right: 16px; bottom: 40px; z-index: 2500; display: flex; gap: 10px; align-items: center; padding: 10px 12px; background: var(--fundo, #fff); border: 1px solid var(--linha); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.16); font-size: 13px; }

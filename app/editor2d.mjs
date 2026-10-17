@@ -97,9 +97,9 @@ export function abrirEditor2D({ modo, controle, tr, el, abrirModal, fecharModal,
     return [x, y];
   };
   // trecho (i → i+1, fechando no primeiro) mais perto do clique, em pixels; -1 se nenhum perto o bastante
-  const segmentoPerto = (sx, sy) => {
+  const segmentoPerto = (sx, sy, limite = 8) => {
     if (pts.length < 2) return -1;
-    let m = -1, dm = 8;
+    let m = -1, dm = limite;
     for (let i = 0; i < pts.length; i++) {
       const [ax, ay] = paraTela(pts[i].x, pts[i].y), [bx, by] = paraTela(pts[(i + 1) % pts.length].x, pts[(i + 1) % pts.length].y);
       const vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy || 1, t = Math.max(0, Math.min(1, ((sx - ax) * vx + (sy - ay) * vy) / l2));
@@ -170,8 +170,9 @@ export function abrirEditor2D({ modo, controle, tr, el, abrirModal, fecharModal,
     if (ferramenta === 'editar') { sel = -1; desenhar(); return; }
     guardar();
     const [x, y] = encaixar(q.x, q.y);
-    // clicou em cima de uma linha do perfil: o ponto novo entra nessa linha, onde você clicou
-    const seg = segmentoPerto(q.sx, q.sy);
+    // o ponto novo entra no trecho do contorno MAIS PERTO do clique (com 3 ou mais pontos o perfil já é
+    // fechado): antes, longe de uma linha, ele ia para o fim da lista e "puxava" uma linha do último ponto
+    const seg = segmentoPerto(q.sx, q.sy, pts.length >= 3 ? Infinity : 8);
     if (seg >= 0) { pts.splice(seg + 1, 0, { x, y, s: ferramenta === 'curva' }); sel = seg + 1; desenhar(); return; }
     pts.push({ x, y, s: ferramenta === 'curva' }); sel = pts.length - 1; desenhar();
   });

@@ -26,5 +26,6 @@ contextBridge.exposeInMainWorld('anvil', {
   informarEstado: s => ipcRenderer.send('app:estado', s),
   aoSalvarEFechar: cb => ipcRenderer.on('app:salvarEFechar', cb),
   perguntarSalvar: () => ipcRenderer.invoke('app:perguntarSalvar'),
+  ultimaRelease: () => ipcRenderer.invoke('app:ultimaRelease'),
   fecharAgora: () => ipcRenderer.send('app:fecharAgora'),
 });

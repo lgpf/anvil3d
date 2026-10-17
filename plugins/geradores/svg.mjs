@@ -3,7 +3,7 @@
 const PADRAO = JSON.stringify([[[0, 0.3], [0.25, 0], [0.5, 0.3], [0.5, 0.6], [0.25, 0.9], [0, 0.6]]]);
 export default {
   api: 1, id: 'svg', nome: 'Desenho SVG', categoria: 'Geradores', icone: '✎', cor: '#457b9d', versao: '1.0.0', ordem: 4,
-  descricao: 'Desenho vetorial (SVG) extrudado — use Arquivo › Importar SVG…',
+  descricao: 'Desenho vetorial (SVG) extrudado e editável — clique para escolher o arquivo .svg (ou use Arquivo › Importar SVG…)',
   en: { nome: 'SVG drawing', categoria: 'Generators', descricao: 'Extruded vector drawing (SVG) — use File › Import SVG…',
     rotulos: { largura: 'Width (mm)', altura: 'Height (mm)', preencher: 'Fill the holes', espelhar: 'Mirror (flip horizontally)' } },
   parametros: [

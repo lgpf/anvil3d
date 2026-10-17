@@ -1,7 +1,7 @@
 {
   "name": "anvil3d",
   "productName": "Anvil3D",
-  "version": "0.43.1",
+  "version": "0.46.4",
   "description": "Anvil3D — CAD local estilo Tinkercad com histórico editável, fillet/chanfro, edição de malha e plugins",
   "main": "main.js",
   "author": {

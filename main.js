@@ -1,5 +1,5 @@
 // Processo principal do Electron: janela, arquivos, plugins e protocolo app://
-const { app, BrowserWindow, protocol, ipcMain, dialog, shell, Menu } = require('electron');
+const { app, BrowserWindow, protocol, ipcMain, dialog, shell, Menu, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -231,14 +231,18 @@ app.whenReady().then(() => {
     await fs.promises.writeFile(r.filePath, Buffer.from(bytes));
     return r.filePath;
   });
+  // importar: vários arquivos de uma vez; a pasta usada fica lembrada durante a sessão
+  let pastaImportar = null;
   ipcMain.handle('arquivo:importar', async () => {
-    const r = await dialog.showOpenDialog(janela, { filters: [{ name: txt().stl, extensions: ['stl'] }], properties: ['openFile'] });
-    if (r.canceled) return null;
-    return { nome: path.basename(r.filePaths[0]).replace(/\.stl$/i, ''), bytes: await fs.promises.readFile(r.filePaths[0]) };
+    const r = await dialog.showOpenDialog(janela, { defaultPath: pastaImportar || undefined, filters: [{ name: txt().stl, extensions: ['stl'] }], properties: ['openFile', 'multiSelections'] });
+    if (r.canceled || !r.filePaths.length) return null;
+    pastaImportar = path.dirname(r.filePaths[0]);
+    return Promise.all(r.filePaths.map(async f => ({ nome: path.basename(f).replace(/\.stl$/i, ''), bytes: await fs.promises.readFile(f) })));
   });
   ipcMain.handle('arquivo:importarSvg', async () => {
-    const r = await dialog.showOpenDialog(janela, { filters: [{ name: 'SVG', extensions: ['svg'] }], properties: ['openFile'] });
+    const r = await dialog.showOpenDialog(janela, { defaultPath: pastaImportar || undefined, filters: [{ name: 'SVG', extensions: ['svg'] }], properties: ['openFile'] });
     if (r.canceled) return null;
+    pastaImportar = path.dirname(r.filePaths[0]);
     return { nome: path.basename(r.filePaths[0]).replace(/\.svg$/i, ''), texto: await fs.promises.readFile(r.filePaths[0], 'utf8') };
   });
   ipcMain.handle('pecas:listar', () => {
@@ -269,6 +273,15 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('app:arquivoInicial', () => arquivoInicial(process.argv));
   ipcMain.handle('app:versao', () => require('./package.json').version);
+  // última release publicada no GitHub (só leitura; nenhum dado do usuário é enviado)
+  ipcMain.handle('app:ultimaRelease', async () => {
+    try {
+      const r = await net.fetch('https://api.github.com/repos/lgpf/anvil3d/releases/latest', { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Anvil3D' } });
+      if (!r.ok) return null;
+      const j = await r.json();
+      return { tag: j.tag_name, nome: j.name, url: j.html_url, data: j.published_at };
+    } catch { return null; }
+  });
   // a mesma pergunta de "salvar as alterações?" do fechar a janela, para Novo/Abrir (3 opções)
   ipcMain.handle('app:perguntarSalvar', e => dialog.showMessageBoxSync(BrowserWindow.fromWebContents(e.sender), {
     type: 'question', buttons: [txt().salvar, txt().naoSalvar, txt().cancelar], defaultId: 0, cancelId: 2, noLink: true,
