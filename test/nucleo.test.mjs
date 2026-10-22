@@ -149,5 +149,20 @@ console.log('Reparo para impressão:');
   ok(r.length === 2 && r[1].nome === 'b' && r.every(x => x.d.t.length === 36 && M.diagnosticar(x.d).ok), '3MF: duas peças, nomes e malhas preservados');
 }
 
+{
+  console.log('acabamento de peça extrudada (texto)');
+  const { extrairArestas: ex } = await import('../app/core/arestas.mjs');
+  const { acabamentoExtrudado } = await import('../app/core/acabamento-extrudado.mjs');
+  const no = novaForma(reg.obter('texto'), { ...parametrosPadrao(reg.obter('texto')), texto: 'A3', tamanho: 10, espessura: 3 }, '#f00');
+  const b = motor.local(no), fe = ex(b), top = b.boundingBox().max[2];
+  const doTopo = fe.map((f, i) => i).filter(i => fe[i].tipo === 'reta' ? Math.abs(fe[i].a[2] - top) < 1e-4 && Math.abs(fe[i].b[2] - top) < 1e-4 : fe[i].pontos.every(p => Math.abs(p[2] - top) < 1e-4));
+  for (const [modo, sel] of [['chanfro', doTopo], ['fillet', fe.map((f, i) => i)]]) {
+    const r = acabamentoExtrudado(wasm, b, fe, sel, modo, 0.5, motor.ctx.segmentos);
+    ok(r && r.decompose().length === b.decompose().length && r.volume() < b.volume() && r.volume() > b.volume() * 0.7, `${modo}: pelo contorno, ${r?.decompose().length} partes, volume ${r?.volume().toFixed(1)} de ${b.volume().toFixed(1)}`);
+  }
+  const meio = fe.map((f, i) => i).filter(i => fe[i].tipo === 'reta' && Math.abs(fe[i].a[2] - top) < 1e-4).slice(0, 3);
+  ok(acabamentoExtrudado(wasm, b, fe, meio, 'chanfro', 0.5, motor.ctx.segmentos) === null, 'só algumas arestas do topo: fica com o método aresta por aresta');
+}
+
 console.log(falhas ? `\n${falhas} falha(s)` : '\nTudo certo.');
 process.exit(falhas ? 1 : 0);

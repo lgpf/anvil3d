@@ -1,5 +1,6 @@
 // Motor de geometria: avalia a árvore de construção com o Manifold (WASM).
 // Funciona tanto no app quanto no Node (usado pelos testes).
+import { acabamentoExtrudado } from './acabamento-extrudado.mjs';
 import { contornosDoTexto } from './texto.mjs';
 import { compor, ehIdentidade } from './transform.mjs';
 import { lerPontos } from './plugins.mjs';
@@ -85,7 +86,9 @@ export class MotorGeometria {
       try {
         const feicoes = extrairArestas(base);
         const { indices, faltando } = casarArestas(feicoes, no.arestas);
-        const { solido, erros } = aplicarAcabamento(this.wasm, base, indices.map(i => feicoes[i]), no.modo, no.medida, this.ctx.segmentos);
+        // peça extrudada com grupos inteiros de arestas (topo, base, verticais): acabamento pelo contorno 2D
+        const extrudado = acabamentoExtrudado(this.wasm, base, feicoes, indices, no.modo, no.medida, this.ctx.segmentos);
+        const { solido, erros } = extrudado ? { solido: extrudado, erros: [] } : aplicarAcabamento(this.wasm, base, indices.map(i => feicoes[i]), no.modo, no.medida, this.ctx.segmentos);
         const avisos = [...(faltando ? [tt`${faltando} aresta(s) não encontrada(s) depois da mudança`] : []), ...new Set(erros.map(x => tr(x)))];
         if (avisos.length) solido.avisoAnvil = avisos.join('; ');
         const sub = this.local(no.filhos[0]).caminhos;
