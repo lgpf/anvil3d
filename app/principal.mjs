@@ -2025,6 +2025,12 @@ function sairAplicarFace() {
   AF = null; vista.classList.remove('escolhendo'); atualizarVisual(); montarPainel(); desenhar();
 }
 // matriz da peça deitada no ponto escolhido, com o giro (em volta da normal) e o tamanho do painel
+// texto do aviso do "Aplicar na face": curva demais, ou (no "Dobrar nas arestas") um canto para dentro
+function textoAvisoAF(a) {
+  return a === 'canto'
+    ? tr('O texto passa por um canto para dentro: as letras perto do canto podem se atravessar ou ficar cortadas. Afaste o texto do canto, diminua o tamanho ou use "Projetar reto".')
+    : tr('Esta área é curva demais para o tamanho da peça: as letras podem deformar. Diminua o tamanho ou use "Suavizar" ou "Projetar reto".');
+}
 function matrizAF() {
   const A = noPorId(AF.id), mA = malhas.get(AF.id), t = A.transformacao, n = AF.n;
   mA.geometry.computeBoundingBox();
@@ -2035,6 +2041,10 @@ function matrizAF() {
   let xL = AF.direita.clone().sub(zL.clone().multiplyScalar(AF.direita.dot(zL)));
   if (xL.lengthSq() < 1e-6) xL = new V3(0, 0, 1).cross(zL);
   if (xL.lengthSq() < 1e-6) xL = new V3(1, 0, 0).cross(zL);
+  // Numa face em pé ou inclinada, o texto começa NIVELADO (a linha dele na horizontal do mundo), no sentido
+  // mais perto da direita da tela; o Giro gira a partir daí. Antes ele seguia a direita da câmera, e olhando
+  // a peça de cima o texto já começava torto (e no "Dobrar nas arestas" a torção ia aumentando).
+  if (Math.abs(zL.z) < 0.9) { const h = new V3(0, 0, 1).cross(zL); if (h.lengthSq() > 1e-6) { h.normalize(); if (h.dot(xL) < 0) h.negate(); xL = h; } }
   xL.normalize().applyAxisAngle(zL, AF.giro * RAD);
   const dims = [tl.x, tl.y, tl.z], iw = [0, 1, 2].filter(i => i !== ka).sort((a, b) => dims[b] - dims[a])[0], ir = 3 - ka - iw;
   const eL = i => new V3().setComponent(i, 1), loc = new THREE.Matrix4().makeBasis(eL(iw), eL(ir), eL(ka));
@@ -2056,7 +2066,7 @@ function agendarPreviaAF(atraso = 120) {
     catch (e) { return mensagem(e.message, true); }
     AF.aviso = res.avisoCurva; const d = dadosMalha(res); res.delete();
     limparPreviaAF();
-    const av = document.querySelector('#aviso-curva-af'); if (av) av.hidden = !AF.aviso;
+    const av = document.querySelector('#aviso-curva-af'); if (av) { av.hidden = !AF.aviso; av.textContent = textoAvisoAF(AF.aviso); }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(d.posicoes), 3)); g.setIndex(new THREE.BufferAttribute(new Uint32Array(d.indices), 1)); g.computeVertexNormals();
     const A = noPorId(AF.id);
     grupoPreviaAF.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: A.furo ? 0x8a9399 : A.cor, roughness: 0.6, transparent: true, opacity: A.furo ? 0.55 : 0.92 })));
@@ -2102,8 +2112,8 @@ function painelAplicarFace() {
     linha(tr('Tamanho'), 10, 400, 1, AF.escala, '%', v => { AF.escala = v; agendarPreviaAF(); }),
     linha(tr('Afundar'), 0, 3, 0.1, AF.afundar, 'mm', v => { AF.afundar = v; agendarPreviaAF(); }),
     campo(tr('Modo'), el('select', { onchange: e => { AF.modo = e.target.value; agendarPreviaAF(0); } },
-      ...[['curva', tr('Acompanhar a curva')], ['suave', tr('Suavizar (ignora dobras pequenas)')], ['reto', tr('Projetar reto (fica plano)')]].map(([v, r]) => el('option', { value: v, selected: AF.modo === v }, r)))),
-    el('p', { class: 'caixa-aviso', id: 'aviso-curva-af', hidden: !AF.aviso }, tr('Esta área é curva demais para o tamanho da peça: as letras podem deformar. Diminua o tamanho ou use "Suavizar" ou "Projetar reto".')));
+      ...[['curva', tr('Acompanhar a curva')], ['suave', tr('Suavizar (ignora dobras pequenas)')], ['reto', tr('Projetar reto (fica plano)')], ['dobrar', tr('Dobrar nas arestas (faces planas)')]].map(([v, r]) => el('option', { value: v, selected: AF.modo === v }, r)))),
+    el('p', { class: 'caixa-aviso', id: 'aviso-curva-af', hidden: !AF.aviso }, textoAvisoAF(AF.aviso)));
   painel.append(el('div', { class: 'botoes' },
     ...(AF.alvo ? [el('button', { class: 'primario', onclick: aplicarAF }, tr('Aplicar'))] : []),
     el('button', { onclick: () => { sairAplicarFace(); mensagem(tr('Aplicar na face cancelado.')); } }, tr('Cancelar'))));
@@ -2127,6 +2137,108 @@ function projetarNaSuperficie(dirMundo = null) {
 // amostras no lado maior (menos = mais rápido, usado na prévia enquanto você ajusta)
 // op.modo: 'curva' (acompanha a curva, padrão) · 'reto' (fica plano, só encosta) · 'suave' (acompanha uma
 // versão alisada da superfície, ignorando dobras pequenas); op.afundar: quanto entra na superfície (mm)
+// "Dobrar nas arestas": o texto anda pela superfície como um adesivo. A partir do ponto apontado, a linha
+// do texto segue reta sobre os triângulos do destino; ao passar de uma face para a vizinha, a direção é
+// girada em volta da aresta comum (o caminho "dobra" junto com a superfície). Cada letra vai inteira,
+// sem deformar, deitada na face onde cai o centro dela. Feito para peças de faces planas (estrela,
+// icosaedro, caixas, prismas); nas curvas suaves o "Acompanhar a curva" continua sendo melhor.
+function dobrarNasArestas(wasm, fino, ctx) {
+  const { W, nT, faceSob, u, v, k, s, fundo, embute, mn, mx, cimaMundo } = ctx;
+  const P = (t, i) => [W[t * 9 + i * 3], W[t * 9 + i * 3 + 1], W[t * 9 + i * 3 + 2]]; // vértice i do triângulo t, em (u, v, k)
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]], mul = (a, x) => [a[0] * x, a[1] * x, a[2] * x];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const norm = a => { const l = Math.hypot(...a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+  const normalTri = t => norm(cross(sub(P(t, 1), P(t, 0)), sub(P(t, 2), P(t, 0))));
+  // vizinhança: qual triângulo está do outro lado de cada aresta
+  const chave = p => p.map(x => x.toFixed(4)).join(','), arestas = new Map();
+  for (let t = 0; t < nT; t++) for (let i = 0; i < 3; i++) {
+    const a = chave(P(t, i)), b = chave(P(t, (i + 1) % 3)), c = a < b ? a + '|' + b : b + '|' + a;
+    (arestas.get(c) ?? arestas.set(c, []).get(c)).push([t, i]);
+  }
+  const vizinho = (t, i) => { const a = chave(P(t, i)), b = chave(P(t, (i + 1) % 3)), l = arestas.get(a < b ? a + '|' + b : b + '|' + a) ?? []; return l.find(([x]) => x !== t)?.[0] ?? -1; };
+  const cantos = { dentro: false };
+  const girar = (d, e, ang) => { const c = Math.cos(ang), sn = Math.sin(ang); return add(add(mul(d, c), mul(cross(e, d), sn)), mul(e, dot(e, d) * (1 - c))); };
+  // anda "dist" pela superfície, a partir do ponto p no triângulo t, na direção d (no plano do triângulo)
+  const andar = (t, p, d, dist, b, nivelar = false) => {
+    let resta = Math.abs(dist); d = dist < 0 ? mul(d, -1) : d;
+    let sentidoB = dist < 0 ? -1 : 1; b = mul(b, sentidoB);
+    for (let passos = 0; passos < 500 && resta > 1e-9; passos++) {
+      const n = normalTri(t);
+      let melhor = Infinity, aresta = -1;
+      for (let i = 0; i < 3; i++) {
+        const a = P(t, i), c = P(t, (i + 1) % 3), e = sub(c, a);
+        // interseção da reta p + d·x com a aresta, no plano do triângulo
+        const m = cross(e, n), den = dot(d, m); if (Math.abs(den) < 1e-12) continue;
+        const x = dot(sub(a, p), m) / den; if (x <= 1e-9) continue;
+        const q = add(p, mul(d, x)), w = dot(sub(q, a), e) / (dot(e, e) || 1);
+        if (w < -1e-6 || w > 1 + 1e-6) continue;
+        if (x < melhor) { melhor = x; aresta = i; }
+      }
+      if (aresta < 0 || melhor >= resta) return { t, p: add(p, mul(d, resta)), d: dist < 0 ? mul(d, -1) : d, b: mul(b, sentidoB), n };
+      p = add(p, mul(d, melhor)); resta -= melhor;
+      let viz = vizinho(t, aresta);
+      // texto nivelado não sobe para uma face quase horizontal (a tampa da estrela): ali ele segue reto
+      if (viz >= 0 && nivelar && !cimaNaFace(normalTri(viz))) viz = -1;
+      if (viz < 0) return { t, p: add(p, mul(d, resta)), d: dist < 0 ? mul(d, -1) : d, b: mul(b, sentidoB), n }; // borda aberta: segue reto
+      const n2 = normalTri(viz), e = norm(sub(P(t, (aresta + 1) % 3), P(t, aresta)));
+      // canto para dentro: a face seguinte vira de frente para o caminho (a normal dela aponta contra ele)
+      if (dot(mul(n2, lado), d) < -0.05) cantos.dentro = true;
+      const ang = Math.atan2(dot(cross(n, n2), e), dot(n, n2));
+      d = norm(girar(d, e, ang)); b = norm(girar(b, e, ang));
+      // caminho "natural": na face nova a linha do texto volta a ficar nivelada (perpendicular ao "para
+      // cima" do mundo deitado na face), como uma faixa em volta da peça; só segue a dobra pura quando a
+      // face é quase horizontal e não tem um "para cima" definido
+      if (nivelar) { const c = horizontalNaFace(mul(n2, lado), d); if (c) d = c; }
+      p = add(p, mul(d, 1e-7)); t = viz;
+    }
+    return { t, p, d: dist < 0 ? mul(d, -1) : d, b: mul(b, sentidoB), n: normalTri(t) };
+  };
+  // direção nivelada na face de normal N (perpendicular ao "para cima" do mundo), no sentido mais perto de d
+  const cimaNaFace = N => { if (!cimaMundo) return null; const c = sub(cimaMundo, mul(N, dot(cimaMundo, N))); return Math.hypot(...c) < 0.2 ? null : norm(c); };
+  const horizontalNaFace = (N, d) => { const c = cimaNaFace(N); if (!c) return null; let h = norm(cross(c, N)); if (dot(h, d) < 0) h = mul(h, -1); return h; };
+  // ponto de partida: o centro do texto, na face que o raio encontra
+  const cu = (mn[u] + mx[u]) / 2, cv = (mn[v] + mx[v]) / 2, f0 = faceSob(cu, cv);
+  if (!f0) return null;
+  let n0 = normalTri(f0.t);
+  const o = -s, lado = n0[2] * o < 0 ? -1 : 1; // a normal que aponta para o lado da peça
+  const nOut = t => mul(normalTri(t), lado);
+  n0 = mul(n0, lado);
+  const p0 = [cu, cv, f0.h];
+  let t0d = norm(sub([1, 0, 0], mul(n0, n0[0]))); // o eixo do texto deitado na face
+  // a base (eixo do texto, "para cima", normal) tem de ter a mesma "mão" que a peça original (u, v e o
+  // lado de fora); com a mão trocada as letras saíam espelhadas
+  const mao = o;
+  // texto quase nivelado (até ~30° de inclinação, o que sobra de girar a vista ao clicar): nivela de vez e
+  // mantém nivelado ao passar de uma face
+  // para outra; inclinado de propósito, segue a dobra pura
+  let nivelado = false;
+  { const h0 = horizontalNaFace(n0, t0d); if (h0 && Math.abs(dot(h0, t0d)) > Math.cos(30 * Math.PI / 180)) { t0d = h0; nivelado = true; } }
+  const cima = (N, T) => mul(norm(cross(N, T)), mao);
+  let b0 = cima(n0, t0d);
+  // cada letra vai inteira, sem deformar, deitada na face onde cai o centro dela
+  const partes = fino.decompose(), prontas = [];
+  for (const pt of partes) {
+    const bb = pt.boundingBox(), lu = (bb.min[u] + bb.max[u]) / 2, lv = (bb.min[v] + bb.max[v]) / 2;
+    // anda pela linha do texto até o centro da letra; depois sobe/desce até a altura dela
+    let r1 = andar(f0.t, p0, t0d, lu - cu, b0, nivelado);
+    let r2 = andar(r1.t, r1.p, r1.b, lv - cv, r1.d);
+    const N = nOut(r2.t);
+    let T = norm(sub(r1.d, mul(N, dot(r1.d, N))));
+    if (nivelado) { const Tn = horizontalNaFace(N, T); if (Tn) T = Tn; } // letra em pé ("para cima" do mundo)
+    const B = cima(N, T);
+    const Q = r2.p;
+    prontas.push(pt.warp(q => {
+      const a2 = q[u] - lu, c = q[v] - lv, off = (fundo - q[k]) * s - embute;
+      const r = add(add(add(Q, mul(T, a2)), mul(B, c)), mul(N, off));
+      q[u] = r[0]; q[v] = r[1]; q[k] = r[2];
+    }));
+  }
+  partes.forEach(x => x.delete());
+  const res = wasm.Manifold.union(prontas); prontas.forEach(x => x.delete());
+  res.cantoDentro = cantos.dentro;
+  return res;
+}
+
 function calcularProjecao(A, B, dirMundo = null, finura = 180, op = {}) {
   const modo = op.modo || 'curva';
   const mB = malhas.get(B.id);
@@ -2158,7 +2270,17 @@ function calcularProjecao(A, B, dirMundo = null, finura = 180, op = {}) {
     W[t * 9 + c * 3] = tmp.getComponent(u); W[t * 9 + c * 3 + 1] = tmp.getComponent(v); W[t * 9 + c * 3 + 2] = tmp.getComponent(k);
   }
   const cel = passo * 4, gu = Math.ceil(nu * passo / cel) + 1, gv = Math.ceil(nv * passo / cel) + 1, balde = Array.from({ length: gu * gv }, () => []);
+  // faces vistas "de lado" pela direção da projeção (a faixa do corte de um meio tubo, a lateral de um
+  // degrau) não servem de apoio: um ponto que só encontra uma delas fica sem superfície e copia a altura
+  // do vizinho, como se a superfície continuasse. Antes a letra que passava da borda ia parar ali dentro.
+  const deLado = new Uint8Array(nT);
   for (let t = 0; t < nT; t++) {
+    const o = t * 9, e1 = [W[o + 3] - W[o], W[o + 4] - W[o + 1], W[o + 5] - W[o + 2]], e2 = [W[o + 6] - W[o], W[o + 7] - W[o + 1], W[o + 8] - W[o + 2]];
+    const nx = e1[1] * e2[2] - e1[2] * e2[1], ny = e1[2] * e2[0] - e1[0] * e2[2], nz = e1[0] * e2[1] - e1[1] * e2[0], L = Math.hypot(nx, ny, nz) || 1;
+    deLado[t] = Math.abs(nz) / L < 0.2 ? 1 : 0;
+  }
+  for (let t = 0; t < nT; t++) {
+    if (deLado[t]) continue;
     const o = t * 9, au = Math.min(W[o], W[o + 3], W[o + 6]), bu = Math.max(W[o], W[o + 3], W[o + 6]), av = Math.min(W[o + 1], W[o + 4], W[o + 7]), bv = Math.max(W[o + 1], W[o + 4], W[o + 7]);
     const i0 = Math.max(0, Math.floor((au - u0) / cel)), i1 = Math.min(gu - 1, Math.floor((bu - u0) / cel)), j0 = Math.max(0, Math.floor((av - v0) / cel)), j1 = Math.min(gv - 1, Math.floor((bv - v0) / cel));
     for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) balde[i * gv + j].push(t);
@@ -2183,6 +2305,27 @@ function calcularProjecao(A, B, dirMundo = null, finura = 180, op = {}) {
       if (Number.isNaN(melhor) || nota < melhorNota) { melhor = h; melhorNota = nota; }
     }
     mapa[i * nv + j] = melhor;
+  }
+  // A superfície que vale é a que continua, sem saltos, a partir do centro da peça. Onde o texto passa da
+  // borda da superfície (o fim da parede curva de um meio tubo), o raio acha outra parede, mais longe ou
+  // mais perto, com um salto grande: esses pontos ficam sem superfície e copiam a altura do vizinho, como
+  // se a curva continuasse. Antes a letra que passava da borda ia parar dentro da outra parede.
+  {
+    const lim = Math.max(2 * D, 6 * passo), ok = new Uint8Array(nu * nv);
+    let ci = Math.max(0, Math.min(nu - 1, Math.round(((mn[u] + mx[u]) / 2 - u0) / passo))), cj = Math.max(0, Math.min(nv - 1, Math.round(((mn[v] + mx[v]) / 2 - v0) / passo)));
+    if (Number.isNaN(mapa[ci * nv + cj])) { let dm = Infinity; for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) if (!Number.isNaN(mapa[i * nv + j])) { const d = (i - ci) ** 2 + (j - cj) ** 2; if (d < dm) { dm = d; ci = i; cj = j; } } }
+    if (!Number.isNaN(mapa[ci * nv + cj])) {
+      const fila = [ci * nv + cj]; ok[fila[0]] = 1;
+      while (fila.length) {
+        const c = fila.pop(), i = Math.floor(c / nv), j = c % nv;
+        for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const x = i + a, y = j + b; if (x < 0 || y < 0 || x >= nu || y >= nv) continue;
+          const vz = x * nv + y; if (ok[vz] || Number.isNaN(mapa[vz])) continue;
+          if (Math.abs(mapa[vz] - mapa[c]) <= lim) { ok[vz] = 1; fila.push(vz); }
+        }
+      }
+      for (let c = 0; c < mapa.length; c++) if (!ok[c]) mapa[c] = NaN;
+    }
   }
   // pontos sem superfície embaixo: pegam o valor do vizinho mais perto (preenchimento por camadas)
   let validos = mapa.filter(x => !Number.isNaN(x)).length;
@@ -2254,7 +2397,7 @@ function calcularProjecao(A, B, dirMundo = null, finura = 180, op = {}) {
       let n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
       const L = Math.hypot(...n) || 1; n = n.map(x => x / L);
       if (n[2] * -s < 0) n = n.map(x => -x);
-      return { h: melhor.h, n };
+      return { h: melhor.h, n, t: melhor.t };
     };
     const AU0 = AU[ic] + ((uc - u0) / passo - ic) * passo, AV0 = AV[jc] + ((vc - v0) / passo - jc) * passo;
     const inverso = (A, alvo, origem) => {
@@ -2275,7 +2418,8 @@ function calcularProjecao(A, B, dirMundo = null, finura = 180, op = {}) {
       }
       avisoCurva = maxAng > 55 * Math.PI / 180;
     }
-    if (modo === 'reto') {
+    if (modo === 'dobrar') { res = dobrarNasArestas(wasm, fino, { W, nT, faceSob, u, v, k, s, fundo, embute, D, mn, mx, cimaMundo: (() => { const c = new V3(0, 0, 1); if (Rot) c.applyMatrix4(Rot); return [c.getComponent(u), c.getComponent(v), c.getComponent(k)]; })() }); if (res?.cantoDentro) avisoCurva = 'canto'; }
+    else if (modo === 'reto') {
       // plano: a peça inteira só desce até encostar no ponto central, sem se deformar
       const hc = amostra((mn[u] + mx[u]) / 2, (mn[v] + mx[v]) / 2);
       res = fino.warp(p => { const t = (fundo - p[k]) * s; p[k] = hc - s * (t - embute); });
@@ -4580,7 +4724,7 @@ const reprojetar = (i, alvo, modo = 'curva', inverter = false) => {
   void cB;
   confirmarProjecao(o, calcularProjecao(c, B, dir, 180, { modo, afundar: 0.3 }), c);
 };
-window.__anvil = { reprojetar, abrirImagem: f => abrirImportarImagem(f), importarStls: (a, p) => importarStls(a, p), importarMalhas: (a, p) => importarMalhas(a, p), get previaAF() { return grupoPreviaAF.children.length; }, orbita, abrirTexto: (texto, caminho) => abrirArquivo({ texto, caminho }), motor, moverPeca: v => { moverPeca = v; atualizarVisual(); }, alcasLaterais: v => { alcasLaterais = v; desenhar(); }, criarDeSvg: (t, n) => criarDeSvg(t, n), mostrarCotas: (chave = 'todas') => { alcaHover = null; cotasAlca = chave; cotasAte = performance.now() + 60000; desenhar(); }, get espelho() { return ESP; }, arrasteAlcaInfo: () => arrasteAlca, serializarComMiniatura: () => serializarComMiniatura(), selecionar: ids => { E.sel = ids; atualizarVisual(); montarPainel(); }, gizmo, grupoAfetado, get alinharObj() { return ALN; }, get alinhar() { return AL; }, get modoMalha() { return ME; }, THREE, camera, cena, grupoArestas, malhas, estado: E, get modoAresta() { return MA; } };
+window.__anvil = { reprojetar, calc: (A, B, d, m) => calcularProjecao(A, B, d, 180, { modo: m, afundar: 0.3 }), abrirImagem: f => abrirImportarImagem(f), importarStls: (a, p) => importarStls(a, p), importarMalhas: (a, p) => importarMalhas(a, p), get previaAF() { return grupoPreviaAF.children.length; }, orbita, abrirTexto: (texto, caminho) => abrirArquivo({ texto, caminho }), motor, moverPeca: v => { moverPeca = v; atualizarVisual(); }, alcasLaterais: v => { alcasLaterais = v; desenhar(); }, criarDeSvg: (t, n) => criarDeSvg(t, n), mostrarCotas: (chave = 'todas') => { alcaHover = null; cotasAlca = chave; cotasAte = performance.now() + 60000; desenhar(); }, get espelho() { return ESP; }, arrasteAlcaInfo: () => arrasteAlca, serializarComMiniatura: () => serializarComMiniatura(), selecionar: ids => { E.sel = ids; atualizarVisual(); montarPainel(); }, gizmo, grupoAfetado, get alinharObj() { return ALN; }, get alinhar() { return AL; }, get modoMalha() { return ME; }, THREE, camera, cena, grupoArestas, malhas, estado: E, get modoAresta() { return MA; } };
 
 // ---------- idioma ----------
 const originais = new WeakMap();
