@@ -90,6 +90,9 @@ export class MotorGeometria {
         const extrudado = acabamentoExtrudado(this.wasm, base, feicoes, indices, no.modo, no.medida, this.ctx.segmentos);
         const { solido, erros } = extrudado ? { solido: extrudado, erros: [] } : aplicarAcabamento(this.wasm, base, indices.map(i => feicoes[i]), no.modo, no.medida, this.ctx.segmentos);
         const avisos = [...(faltando ? [tt`${faltando} aresta(s) não encontrada(s) depois da mudança`] : []), ...new Set(erros.map(x => tr(x)))];
+        if (extrudado?.medidaSegura != null) avisos.push(extrudado.medidaSegura > 0
+          ? tt`A medida é grande para as partes mais finas da peça e o acabamento pode sair com defeitos nelas. Até ${String(extrudado.medidaSegura).replace('.', ',')} mm fica limpo.`
+          : tr('A medida é grande para as partes mais finas da peça e o acabamento pode sair com defeitos nelas. Experimente uma medida menor.'));
         if (avisos.length) solido.avisoAnvil = avisos.join('; ');
         const sub = this.local(no.filhos[0]).caminhos;
         if (sub) solido.caminhos = new Map([...sub].map(([k, c]) => [k, '0/' + c]));

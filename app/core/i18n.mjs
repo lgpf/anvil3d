@@ -24,7 +24,9 @@ export const EN = {
   // ---- formatos de malha e aviso de processamento
   'Importar malha (STL, OBJ, 3MF)…': 'Import mesh (STL, OBJ, 3MF)…', 'Exportar (STL, OBJ, 3MF)…': 'Export (STL, OBJ, 3MF)…',
   'Exportar': 'Export', 'Exportar STL, OBJ ou 3MF (Ctrl+E)': 'Export STL, OBJ or 3MF (Ctrl+E)',
-  'Lendo malha…': 'Reading mesh…', 'Gerando malha…': 'Building mesh…', 'Gerando malhas…': 'Building meshes…', 'Processando…': 'Processing…',
+  'Lendo malha…': 'Reading mesh…', 'Abrindo projeto…': 'Opening project…',
+  'A medida é grande para as partes mais finas da peça e o acabamento pode sair com defeitos nelas. Até {0} mm fica limpo.': 'The size is large for the thinnest parts of the piece and the finish may come out with defects there. Up to {0} mm it comes out clean.',
+  'A medida é grande para as partes mais finas da peça e o acabamento pode sair com defeitos nelas. Experimente uma medida menor.': 'The size is large for the thinnest parts of the piece and the finish may come out with defects there. Try a smaller size.', 'Gerando malha…': 'Building mesh…', 'Gerando malhas…': 'Building meshes…', 'Processando…': 'Processing…',
   '({0} triângulos)': '({0} triangles)', '{0} malha(s) importada(s).': '{0} mesh(es) imported.',
   'arquivo OBJ vazio ou inválido': 'empty or invalid OBJ file', 'arquivo 3MF inválido (não é um zip)': 'invalid 3MF file (not a zip)',
   'arquivo 3MF com compressão não suportada': '3MF file with unsupported compression', 'arquivo 3MF sem modelo 3D': '3MF file without a 3D model',

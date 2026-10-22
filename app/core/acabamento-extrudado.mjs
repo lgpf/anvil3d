@@ -58,7 +58,7 @@ const recuo = (modo, m, h) => modo === 'chanfro' ? m - h : m - Math.sqrt(Math.ma
 // (chanfro). O recuo de cada canto é limitado pelo tamanho das arestas vizinhas, para que partes finas
 // (o pingo do i, hastes estreitas) não sumam como sumiriam num simples "abrir e fechar" do contorno.
 function cantosArredondados(wasm, C, modo, r, segmentos) {
-  const vivo = Math.cos((180 - 20) * Math.PI / 180); // dobra maior que 20° = aresta viva
+  const vivo = Math.cos((180 - 40) * Math.PI / 180); // dobra maior que 40° = canto de verdade (dobras menores, como o fim de uma curva, ficam como estão)
   const novos = [];
   for (const P of C.toPolygons()) {
     const n = P.length, out = [];
@@ -68,6 +68,20 @@ function cantosArredondados(wasm, C, modo, r, segmentos) {
       if (lu < 1e-9 || lw < 1e-9) { out.push(b); continue; }
       const cosA = (u[0] * w[0] + u[1] * w[1]) / (lu * lw); // ângulo entre as duas arestas no vértice
       if (cosA < vivo) { out.push(b); continue; }          // quase reto (curva suave): fica como está
+      // canto para dentro: fica para o "fechar" do contorno logo abaixo (feito pelo Manifold, sem dobras)
+      if ((b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]) < 0) { out.push(b); continue; }
+      // canto vivo encostado numa curva (arestas vizinhas curtinhas, como onde o arco de dentro do n encontra
+      // a haste): o corte ficaria minúsculo e deixava um dente no acabamento de cima; o canto fica vivo
+      if (Math.min(lu, lw) < r * 0.6) { out.push(b); continue; }
+      // canto para fora colado num canto para dentro (o topo da haste do n, logo ao lado do vão do arco):
+      // cortar ali deixava um dente entre o corte e o vão; o canto fica vivo
+      const cantoDentro = j => { const pa = P[(j - 1 + n) % n], pb = P[j], pc = P[(j + 1) % n]; const e1 = [pb[0] - pa[0], pb[1] - pa[1]], e2 = [pc[0] - pb[0], pc[1] - pb[1]]; const l = (Math.hypot(...e1) * Math.hypot(...e2)) || 1; return (e1[0] * e2[1] - e1[1] * e2[0]) / l < -Math.sin(30 * Math.PI / 180); };
+      let dentroPerto = false;
+      for (const passo of [1, -1]) { // anda pelo contorno até 4× a medida para cada lado, procurando um canto para dentro
+        let dist = 0, j = i;
+        for (let k = 0; k < n && dist < r * 4 && !dentroPerto; k++) { const jn = (j + passo + n) % n; dist += Math.hypot(P[jn][0] - P[j][0], P[jn][1] - P[j][1]); j = jn; if (dist < r * 4 && cantoDentro(j)) dentroPerto = true; }
+      }
+      if (dentroPerto) { out.push(b); continue; }
       const ang = Math.acos(Math.max(-1, Math.min(1, cosA)));
       let t = modo === 'chanfro' ? r : r / Math.tan(ang / 2);
       t = Math.min(t, lu * 0.49, lw * 0.49);
@@ -83,6 +97,9 @@ function cantosArredondados(wasm, C, modo, r, segmentos) {
     }
     novos.push(out);
   }
+  // Só os cantos para fora são arredondados/cortados. Os cantos para dentro (o encontro da haste com o
+  // arco do n, o bico do meio do 3) ficam vivos: neles o acabamento vertical teria de ENCHER um vão em
+  // cunha, e qualquer forma de fazer isso deixava espinhos ou tampava o vão.
   return new wasm.CrossSection(novos, 'Positive');
 }
 
@@ -99,9 +116,9 @@ export function acabamentoExtrudado(wasm, base, feicoes, indices, modo, medida, 
     // (chanfro). O recuo de cada canto é limitado pelo tamanho das arestas vizinhas, para que partes finas
     // (o pingo do i, hastes estreitas) não sumam como sumiriam num simples "abrir e fechar" do contorno.
     const D = cantosArredondados(wasm, C, modo, medida, segmentos);
-    // fecha frestas de largura zero que sobram onde dois arredondamentos se encostam (viravam uma lâmina)
-    const D1 = D.offset(1e-3, 'Miter', 4), D2 = D1.offset(-1e-3, 'Miter', 4); D.delete(); D1.delete();
-    C.delete(); C = D2;
+    // (antes aqui o contorno crescia e encolhia 1 µm para fechar frestas; nos cantos muito fechados isso
+    // cortava a ponta do canto e era o "dentinho" no arco de dentro do n)
+    C.delete(); C = D;
     if (C.isEmpty()) { C.delete(); return null; }
   }
   // Um prisma só, em camadas. Cada vértice recua pela direção de meia-esquadria conforme a profundidade
@@ -119,6 +136,19 @@ export function acabamentoExtrudado(wasm, base, feicoes, indices, modo, medida, 
   // dois contornos ao mesmo tempo (como um zíper), então elas não precisam ter o mesmo número de vértices.
   // Cada faixa usa exatamente o contorno da camada de baixo e o da de cima, e por isso as faixas se encaixam
   // umas nas outras sem frestas.
+  // A medida cabe na peça? Se encolher o contorno pela medida faz alguma parte sumir ou se dividir (hastes
+  // mais finas que 2× a medida), o acabamento ali vira uma crista e pode sair com defeitos. Nesse caso
+  // calcula a maior medida que ainda cabe, para o aviso no painel.
+  let medidaSegura = null;
+  if (faces) {
+    const partes = d => { const o = C.offset(-d, 'Miter', 4), n = o.decompose(); const k = n.length; n.forEach(x => x.delete()); o.delete(); return k; };
+    const n0 = partes(0);
+    if (partes(m * 0.98) !== n0) {
+      let lo = 0, hi = m;
+      for (let i = 0; i < 8; i++) { const md = (lo + hi) / 2; if (partes(md * 0.98) === n0) lo = md; else hi = md; }
+      medidaSegura = Math.floor(lo * 0.7 * 20) / 20; // com folga: perto do limite as cristas ainda saem estranhas
+    }
+  }
   // recuo do contorno em cada altura (o acabamento de cima e o de baixo, se houver)
   const dDe = z => Math.max(g.topo && p.z1 - z < m ? recuo(modo, m, Math.max(0, p.z1 - z)) : 0, g.base && z - p.z0 < m ? recuo(modo, m, Math.max(0, z - p.z0)) : 0);
   // cada camada guarda suas regiões: um contorno externo com os furos dele
@@ -182,8 +212,9 @@ export function acabamentoExtrudado(wasm, base, feicoes, indices, modo, medida, 
     if (ficam.length < partes.length) { const n = wasm.Manifold.union(ficam); r.delete(); r = n; }
   }
   partes.forEach(x => x.delete());
+  if (medidaSegura !== null) r.medidaSegura = medidaSegura;
   // limpeza: junta vértices quase iguais e tira triângulos sem área (lâminas de espessura zero)
-  try { const lim = r.simplify(1e-4); if (!lim.isEmpty() && Math.abs(lim.volume() - r.volume()) < r.volume() * 1e-3) { r.delete(); r = lim; } else lim.delete(); } catch {}
+  try { const lim = r.simplify(1e-4); if (!lim.isEmpty() && Math.abs(lim.volume() - r.volume()) < r.volume() * 1e-3) { lim.medidaSegura = r.medidaSegura; r.delete(); r = lim; } else lim.delete(); } catch {}
   return r;
 }
 
@@ -193,21 +224,27 @@ function costurar(wasm, pares, za, zb) {
   if (!pares.length) return null;
   const pos = [], tri = [], baixo = [], cima = [];
   for (const [a, b] of pares) {
-    const A = a.P, n = A.length;
+    // a costura começa (e termina) no meio da aresta mais comprida do contorno de baixo: é onde a emenda
+    // do começo com o fim fica mais tranquila (começando num canto ou numa curva fechada sobrava um dente)
+    let maior = 0, kM = 0;
+    a.P.forEach((q, k) => { const r = a.P[(k + 1) % a.P.length], l = Math.hypot(r[0] - q[0], r[1] - q[1]); if (l > maior) { maior = l; kM = k; } });
+    const qM = a.P[kM], rM = a.P[(kM + 1) % a.P.length];
+    const A = [[(qM[0] + rM[0]) / 2, (qM[1] + rM[1]) / 2], ...a.P.slice(kM + 1), ...a.P.slice(0, kM + 1)], n = A.length;
     // o contorno de cima começa no ponto mais perto do começo do de baixo
-    // o começo do contorno de cima é o que deixa os dois mais "alinhados" ao longo de todo o comprimento
-    // (comparando 16 pontos espalhados), e não só o ponto mais perto do começo do de baixo
-    const pontoEm = (P, f, t) => { let k = 1; while (k < f.length - 1 && f[k] < t) k++; const a = P[(k - 1) % P.length], b2 = P[k % P.length], u = (t - f[k - 1]) / ((f[k] - f[k - 1]) || 1); return [a[0] + (b2[0] - a[0]) * u, a[1] + (b2[1] - a[1]) * u]; };
-    const fr = P => { const f = [0]; let t = 0; for (let k = 0; k < P.length; k++) { const a = P[k], c = P[(k + 1) % P.length]; t += Math.hypot(c[0] - a[0], c[1] - a[1]); f.push(t); } return f.map(x => x / (t || 1)); };
-    const fA = fr(A), amostrasA = Array.from({ length: 16 }, (_, i) => pontoEm(A, fA, i / 16));
-    let k0 = 0, dm = Infinity;
-    const passo = Math.max(1, Math.floor(b.P.length / 64));
-    for (let k = 0; k < b.P.length; k += passo) {
-      const Bk = b.P.slice(k).concat(b.P.slice(0, k)), fB = fr(Bk);
-      let soma = 0; for (let i = 0; i < 16; i++) { const q = pontoEm(Bk, fB, i / 16); soma += Math.hypot(q[0] - amostrasA[i][0], q[1] - amostrasA[i][1]); }
-      if (soma < dm) { dm = soma; k0 = k; }
-    }
-    const B = b.P.slice(k0).concat(b.P.slice(0, k0)), m = B.length;
+    // o contorno de cima passa a começar exatamente no ponto dele mais perto do começo do de baixo (um
+    // vértice novo é criado ali se preciso). Antes ele começava num vértice já existente, que numa parede
+    // reta comprida (a perna do D) podia ficar milímetros adiante e entortava a parede inteira.
+    let k0 = 0, u0 = 0, dm = Infinity;
+    b.P.forEach((q, k) => {
+      const r = b.P[(k + 1) % b.P.length], ab = [r[0] - q[0], r[1] - q[1]], l2 = ab[0] * ab[0] + ab[1] * ab[1] || 1;
+      const u = Math.max(0, Math.min(1, ((A[0][0] - q[0]) * ab[0] + (A[0][1] - q[1]) * ab[1]) / l2));
+      const d = Math.hypot(q[0] + ab[0] * u - A[0][0], q[1] + ab[1] * u - A[0][1]); if (d < dm) { dm = d; k0 = k; u0 = u; }
+    });
+    const P0 = b.P[k0], P1 = b.P[(k0 + 1) % b.P.length], inicio = [P0[0] + (P1[0] - P0[0]) * u0, P0[1] + (P1[1] - P0[1]) * u0];
+    let B = [inicio, ...b.P.slice(k0 + 1), ...b.P.slice(0, k0 + 1)];
+    B = B.filter((q, i) => i === 0 || Math.hypot(q[0] - B[i - 1][0], q[1] - B[i - 1][1]) > 1e-7);
+    if (Math.hypot(B.at(-1)[0] - B[0][0], B.at(-1)[1] - B[0][1]) < 1e-7) B.pop();
+    const m = B.length;
     const ia = pos.length / 3; for (const q of A) pos.push(q[0], q[1], za);
     const ib = pos.length / 3; for (const q of B) pos.push(q[0], q[1], zb);
     baixo.push([A, ia]); cima.push([B, ib]);
@@ -219,17 +256,20 @@ function costurar(wasm, pares, za, zb) {
     // em vez da fração do próprio comprimento, cada vértice de baixo usa a posição do ponto do contorno de
     // cima que fica mais perto dele (andando sempre para a frente). Quando o contorno encolhe de forma
     // desigual (o arco de dentro do n, a barriga do 3), a costura continua ligando pontos vizinhos.
+    // cada vértice de baixo usa a posição (fração do comprimento) do ponto do contorno de cima mais perto
+    // dele, sem limite de janela; a posição é "desenrolada" para perto da anterior e nunca volta para trás
     const fa = [0];
     let tAnt = 0;
     for (let i = 1; i < n; i++) {
       const p0 = A[i]; let melhor = tAnt, dm = Infinity;
       for (let k = 0; k < m; k++) {
-        if (fb[k + 1] < tAnt || fb[k] > tAnt + 0.3) continue;
         const a = B[k], b2 = B[(k + 1) % m], ab = [b2[0] - a[0], b2[1] - a[1]], l2 = ab[0] * ab[0] + ab[1] * ab[1] || 1;
-        let u = ((p0[0] - a[0]) * ab[0] + (p0[1] - a[1]) * ab[1]) / l2; u = Math.max(0, Math.min(1, u));
-        const t = fb[k] + (fb[k + 1] - fb[k]) * u; if (t < tAnt) continue;
-        const d = Math.hypot(a[0] + ab[0] * u - p0[0], a[1] + ab[1] * u - p0[1]); if (d < dm) { dm = d; melhor = t; }
+        const u = Math.max(0, Math.min(1, ((p0[0] - a[0]) * ab[0] + (p0[1] - a[1]) * ab[1]) / l2));
+        const d = Math.hypot(a[0] + ab[0] * u - p0[0], a[1] + ab[1] * u - p0[1]); if (d < dm) { dm = d; melhor = fb[k] + (fb[k + 1] - fb[k]) * u; }
       }
+      while (melhor < tAnt - 0.5) melhor += 1;
+      while (melhor > tAnt + 0.5) melhor -= 1;
+      melhor = Math.min(1, Math.max(tAnt, melhor));
       fa.push(melhor); tAnt = melhor;
     }
     fa.push(1);

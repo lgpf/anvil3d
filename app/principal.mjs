@@ -2165,15 +2165,22 @@ function calcularProjecao(A, B, dirMundo = null, finura = 180, op = {}) {
   }
   for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
     const pu = u0 + i * passo, pv = v0 + j * passo, lista = balde[Math.min(gu - 1, Math.floor(i * passo / cel)) * gv + Math.min(gv - 1, Math.floor(j * passo / cel))];
-    let melhor = NaN;
+    let melhor = NaN, melhorNota = Infinity;
     for (const t of lista) {
       const o = t * 9, x1 = W[o], y1 = W[o + 1], x2 = W[o + 3], y2 = W[o + 4], x3 = W[o + 6], y3 = W[o + 7];
       const den = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3); if (Math.abs(den) < 1e-12) continue;
       const l1 = ((y2 - y3) * (pu - x3) + (x3 - x2) * (pv - y3)) / den, l2 = ((y3 - y1) * (pu - x3) + (x1 - x3) * (pv - y3)) / den, l3 = 1 - l1 - l2;
       if (l1 < -1e-9 || l2 < -1e-9 || l3 < -1e-9) continue;
       const h = l1 * W[o + 2] + l2 * W[o + 5] + l3 * W[o + 8];
-      // primeiro encontro vindo do lado da peça (menor h se descendo em +s… o raio anda no sentido s)
-      if (Number.isNaN(melhor) || (s > 0 ? h < melhor : h > melhor)) melhor = h;
+      // fica a superfície mais perto da face de baixo da peça (as que estão atrás dela valem um pouco menos):
+      // dentro de um tubo, a parede do outro lado fica bem longe e não ganha mais da parede que está ali
+      // na frente, nem nas pontas do texto, onde a parede curva vem para perto
+      const dist = (h - fundo) * s, nota = dist >= 0 ? dist : -dist * 1.5;
+      // bem atrás da peça (mais que a espessura + 35% do tamanho dela) não conta: onde a superfície da frente
+      // acaba (a borda de um meio tubo), o ponto fica sem superfície e pega a do vizinho, em vez de pular
+      // para a parede de fora, lá atrás (era o que "comia" a letra A)
+      if (dist < -(D + 0.35 * Math.max(tam[u], tam[v]))) continue;
+      if (Number.isNaN(melhor) || nota < melhorNota) { melhor = h; melhorNota = nota; }
     }
     mapa[i * nv + j] = melhor;
   }
@@ -2214,7 +2221,41 @@ function calcularProjecao(A, B, dirMundo = null, finura = 180, op = {}) {
     const uc = (mn[u] + mx[u]) / 2, vc = (mn[v] + mx[v]) / 2;
     const ic = Math.max(0, Math.min(nu - 1, Math.round((uc - u0) / passo))), jc = Math.max(0, Math.min(nv - 1, Math.round((vc - v0) / passo)));
     const arco = (n, h) => { const A = new Float64Array(n); for (let i = 1; i < n; i++) A[i] = A[i - 1] + Math.hypot(passo, h(i) - h(i - 1)); return A; };
-    const AU = arco(nu, i => mapa[i * nv + jc]), AV = arco(nv, j => mapa[ic * nv + j]);
+    // Superfície com paredes de lado (a estrela: faces quase paralelas à direção da projeção): ali o
+    // comprimento de arco medido pelo mapa de alturas explode e esticava as letras por cima das quinas.
+    // Nesses casos o texto não é "esticado pela curva": cada letra fica na posição em que foi apontada.
+    // só vale "parede" uma quebra brusca (quase vertical) entre dois pontos vizinhos DENTRO da área do texto;
+    // a lateral de um meio cilindro, que vai ficando em pé aos poucos, continua sendo curva
+    let paredes = false;
+    for (let i = 2; i < nu - 1 && !paredes; i++) for (let j = 2; j < nv - 1; j++) {
+      const h = mapa[i * nv + j], d1 = Math.abs(h - mapa[(i - 1) * nv + j]), d2 = Math.abs(h - mapa[i * nv + j - 1]);
+      const a1 = Math.abs(mapa[(i - 1) * nv + j] - mapa[(i - 2) * nv + j]), a2 = Math.abs(mapa[i * nv + j - 1] - mapa[i * nv + j - 2]);
+      if ((d1 > passo * 8 && d1 > a1 * 4) || (d2 > passo * 8 && d2 > a2 * 4)) { paredes = true; break; }
+    }
+    const reto = n => Float64Array.from({ length: n }, (_, i) => i * passo);
+    const AU = paredes ? reto(nu) : arco(nu, i => mapa[i * nv + jc]), AV = paredes ? reto(nv) : arco(nv, j => mapa[ic * nv + j]);
+    // a face de verdade embaixo de um ponto (o primeiro triângulo do destino que o raio encontra) e a normal
+    // dela, virada para o lado de onde vem a peça
+    const faceSob = (pu, pv) => {
+      const lista = balde[Math.max(0, Math.min(gu - 1, Math.floor((pu - u0) / cel))) * gv + Math.max(0, Math.min(gv - 1, Math.floor((pv - v0) / cel)))];
+      let melhor = null;
+      for (const t of lista) {
+        const o = t * 9, x1 = W[o], y1 = W[o + 1], x2 = W[o + 3], y2 = W[o + 4], x3 = W[o + 6], y3 = W[o + 7];
+        const den = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3); if (Math.abs(den) < 1e-12) continue;
+        const l1 = ((y2 - y3) * (pu - x3) + (x3 - x2) * (pv - y3)) / den, l2 = ((y3 - y1) * (pu - x3) + (x1 - x3) * (pv - y3)) / den, l3 = 1 - l1 - l2;
+        if (l1 < -1e-9 || l2 < -1e-9 || l3 < -1e-9) continue;
+        const h = l1 * W[o + 2] + l2 * W[o + 5] + l3 * W[o + 8];
+        const dist = (h - fundo) * s, nota = dist >= 0 ? dist : -dist * 1.5; // a mesma regra do mapa de alturas
+        if (dist < -(D + 0.35 * Math.max(tam[u], tam[v]))) continue;
+        if (!melhor || nota < melhor.nota) melhor = { h, t, nota };
+      }
+      if (!melhor) return null;
+      const o = melhor.t * 9, e1 = [W[o + 3] - W[o], W[o + 4] - W[o + 1], W[o + 5] - W[o + 2]], e2 = [W[o + 6] - W[o], W[o + 7] - W[o + 1], W[o + 8] - W[o + 2]];
+      let n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+      const L = Math.hypot(...n) || 1; n = n.map(x => x / L);
+      if (n[2] * -s < 0) n = n.map(x => -x);
+      return { h: melhor.h, n };
+    };
     const AU0 = AU[ic] + ((uc - u0) / passo - ic) * passo, AV0 = AV[jc] + ((vc - v0) / passo - jc) * passo;
     const inverso = (A, alvo, origem) => {
       // posição (na grade) cujo comprimento de arco é "alvo"; fora da grade, segue reto
@@ -2258,19 +2299,34 @@ function calcularProjecao(A, B, dirMundo = null, finura = 180, op = {}) {
         if (modo === 'suave' || partes.length === 1) return pt.warp(curvar);
         const b = pt.boundingBox(), cu = (b.min[u] + b.max[u]) / 2, cv = (b.min[v] + b.max[v]) / 2;
         const pu0 = inverso(AU, AU0 + (cu - uc), u0), pv0 = inverso(AV, AV0 + (cv - vc), v0), N0 = normal(pu0, pv0);
-        let desvio = 0;
-        for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) {
-          const qu = inverso(AU, AU0 + (b.min[u] + (b.max[u] - b.min[u]) * i / 4 - uc), u0), qv = inverso(AV, AV0 + (b.min[v] + (b.max[v] - b.min[v]) * j / 4 - vc), v0), N = normal(qu, qv);
+        // Só vai inteira se embaixo da letra houver uma QUINA (a normal muda de repente entre dois pontos
+        // vizinhos). Numa curva suave (um cilindro, mesmo de raio pequeno) a letra continua acompanhando a
+        // curva; antes a letra larga num cilindro também ia inteira e ficava torta.
+        let desvio = 0, quina = 0;
+        const Ns = [];
+        for (let i = 0; i <= 6; i++) { Ns.push([]); for (let j = 0; j <= 6; j++) {
+          const qu = inverso(AU, AU0 + (b.min[u] + (b.max[u] - b.min[u]) * i / 6 - uc), u0), qv = inverso(AV, AV0 + (b.min[v] + (b.max[v] - b.min[v]) * j / 6 - vc), v0), N = normal(qu, qv);
+          Ns[i].push(N);
           desvio = Math.max(desvio, Math.acos(Math.max(-1, Math.min(1, N[0] * N0[0] + N[1] * N0[1] + N[2] * N0[2]))));
-        }
-        if (desvio < 20 * Math.PI / 180) return pt.warp(curvar);
+        } }
+        const ang = (a, c) => Math.acos(Math.max(-1, Math.min(1, a[0] * c[0] + a[1] * c[1] + a[2] * c[2])));
+        for (let i = 0; i <= 6; i++) for (let j = 0; j <= 6; j++) { if (i < 6) quina = Math.max(quina, ang(Ns[i][j], Ns[i + 1][j])); if (j < 6) quina = Math.max(quina, ang(Ns[i][j], Ns[i][j + 1])); }
+        if (desvio < 20 * Math.PI / 180 || quina < 15 * Math.PI / 180) return pt.warp(curvar);
         // base no plano tangente da face: T1 segue o eixo u da peça, T2 completa (mesmo sentido de v)
         let T1 = [1 - N0[0] * N0[0], -N0[0] * N0[1], -N0[0] * N0[2]], l1 = Math.hypot(...T1);
         if (l1 < 1e-6) T1 = [0, 1, 0], l1 = 1;
         T1 = T1.map(x => x / l1);
         let T2 = [N0[1] * T1[2] - N0[2] * T1[1], N0[2] * T1[0] - N0[0] * T1[2], N0[0] * T1[1] - N0[1] * T1[0]];
         if (T2[1] < 0) T2 = T2.map(x => -x);
-        const S0 = [pu0, pv0, amostra(pu0, pv0)];
+        // a letra deita na face de verdade que fica embaixo do centro dela (a normal estimada pelo mapa de
+        // alturas sai errada nas faces quase de lado)
+        const fc = faceSob(pu0, pv0);
+        if (fc && Math.abs(fc.n[2]) > 0.2) {
+          N0[0] = fc.n[0]; N0[1] = fc.n[1]; N0[2] = fc.n[2];
+          T1 = [1 - N0[0] * N0[0], -N0[0] * N0[1], -N0[0] * N0[2]]; l1 = Math.hypot(...T1); if (l1 < 1e-6) { T1 = [0, 1, 0]; l1 = 1; } T1 = T1.map(x => x / l1);
+          T2 = [N0[1] * T1[2] - N0[2] * T1[1], N0[2] * T1[0] - N0[0] * T1[2], N0[0] * T1[1] - N0[1] * T1[0]]; if (T2[1] < 0) T2 = T2.map(x => -x);
+        }
+        const S0 = [pu0, pv0, fc ? fc.h : amostra(pu0, pv0)];
         // a face da letra que encosta na superfície afunda um pouco a mais nas bordas da quina, para não ficar no ar
         const afundaExtra = Math.min(D * 0.5, Math.tan(Math.min(desvio, 60 * Math.PI / 180)) * Math.max(b.max[u] - b.min[u], b.max[v] - b.min[v]) * 0.25);
         return pt.warp(p => {
@@ -3018,13 +3074,21 @@ function atualizarSetaZ() {
   const k = camera.position.distanceTo(topo) * 0.04;
   setaZ.position.copy(topo).add(new V3(0, 0, k * 0.35)); setaZ.scale.setScalar(k);
 }
+// Peças no mesmo lugar (logo depois de Ctrl+C/Ctrl+V a cópia fica em cima do original): o clique fica com
+// a peça selecionada se ela também está ali, em vez da primeira que o raio encontrar. Assim arrastar logo
+// depois de colar leva a seleção inteira (as cópias), e não o original que estava por baixo.
+function acertoPreferindoSelecao(hits) {
+  if (!hits.length) return null;
+  const tol = 0.05 + hits[0].distance * 1e-3;
+  return hits.find(h => h.distance <= hits[0].distance + tol && E.sel.includes(h.object.userData.id)) ?? hits[0];
+}
 renderer.domElement.addEventListener('pointerdown', e => {
   if (e.button !== 0 || e.shiftKey || modClique(e) || !podeMoverPeca()) return;
   const r = raioDoMouse(e);
   let modoZ = false, ponto, ids;
   if (setaZ.visible && r.intersectObject(setaZ, true).length) { modoZ = true; ids = [...E.sel]; ponto = setaZ.position.clone(); }
   else {
-    const hit = r.intersectObjects([...malhas.values()], false)[0]; if (!hit) return;
+    const hit = acertoPreferindoSelecao(r.intersectObjects([...malhas.values()], false)); if (!hit) return;
     const id = hit.object.userData.id; if (!id) return;
     var jaSel = E.sel.includes(id);
     if (!jaSel) { E.sel = [id]; atualizarVisual(); montarPainel(); }
@@ -3076,7 +3140,7 @@ renderer.domElement.addEventListener('pointerup', e => {
   if (t.noGizmo && !(E.modoGizmo === 'girar' && E.sel.length === 1 && raioDoMouse(e).intersectObject(malhas.get(E.sel[0]) ?? new THREE.Object3D(), false).length)) return;
   const r = renderer.domElement.getBoundingClientRect();
   ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
-  const hit = ray.intersectObjects([...malhas.values()], false)[0];
+  const hit = acertoPreferindoSelecao(ray.intersectObjects([...malhas.values()], false));
 
   if (E.escolhendoPonto) {
     if (hit) escolherPonto(hit);
@@ -3479,7 +3543,11 @@ function carregarProjeto(doc, caminho) {
   marcarSujo(false); reconstruir3d(); montarPainel(); enquadrar('iso');
 }
 async function novo() { if (await confirmarDescarte()) carregarProjeto(novoDocumento(), null); }
+// abrir mostra o aviso de processamento (projetos grandes levam alguns segundos para montar)
 async function abrirArquivo(r) {
+  return comAviso(tr('Abrindo projeto…'), () => abrirArquivoAgora(r));
+}
+async function abrirArquivoAgora(r) {
   try { carregarProjeto(carregarDocumento(r.texto), r.caminho); mensagem(tt`Aberto: ${r.caminho}`); }
   catch (e) { mensagem(e.message, true); alert(e.message); }
 }
@@ -4501,12 +4569,15 @@ document.addEventListener('keydown', e => {
 
 // acesso para depuração no console (F12) e testes
 // teste: refaz a projeção de uma peça "na superfície" a partir da receita guardada nela
-const reprojetar = (i, alvo, modo = 'curva') => {
+const reprojetar = (i, alvo, modo = 'curva', inverter = false) => {
   const o = E.doc.objetos[i], rec = o.receita[0], c = structuredClone(rec);
   definirMatriz(c, matrizDoNo(o).multiply(matrizDoNo(rec)));
   const ez = new V3().setFromMatrixColumn(matrizDoNo(c), 2).normalize();
   const B = E.doc.objetos[alvo], cB = new THREE.Box3().setFromObject(malhas.get(B.id)).getCenter(new V3()), cC = new V3().setFromMatrixPosition(matrizDoNo(c));
-  const dir = cB.sub(cC).dot(ez) > 0 ? ez : ez.negate();
+  // direção: para o lado em que a superfície está mais perto do centro da peça
+  const rc = new THREE.Raycaster(), alvoM = malhas.get(B.id), dist = d => { rc.set(cC, d); const h = rc.intersectObject(alvoM, false)[0]; return h ? h.distance : Infinity; };
+  let dir = dist(ez) <= dist(ez.clone().negate()) ? ez : ez.clone().negate(); if (inverter) dir = dir.negate();
+  void cB;
   confirmarProjecao(o, calcularProjecao(c, B, dir, 180, { modo, afundar: 0.3 }), c);
 };
 window.__anvil = { reprojetar, abrirImagem: f => abrirImportarImagem(f), importarStls: (a, p) => importarStls(a, p), importarMalhas: (a, p) => importarMalhas(a, p), get previaAF() { return grupoPreviaAF.children.length; }, orbita, abrirTexto: (texto, caminho) => abrirArquivo({ texto, caminho }), motor, moverPeca: v => { moverPeca = v; atualizarVisual(); }, alcasLaterais: v => { alcasLaterais = v; desenhar(); }, criarDeSvg: (t, n) => criarDeSvg(t, n), mostrarCotas: (chave = 'todas') => { alcaHover = null; cotasAlca = chave; cotasAte = performance.now() + 60000; desenhar(); }, get espelho() { return ESP; }, arrasteAlcaInfo: () => arrasteAlca, serializarComMiniatura: () => serializarComMiniatura(), selecionar: ids => { E.sel = ids; atualizarVisual(); montarPainel(); }, gizmo, grupoAfetado, get alinharObj() { return ALN; }, get alinhar() { return AL; }, get modoMalha() { return ME; }, THREE, camera, cena, grupoArestas, malhas, estado: E, get modoAresta() { return MA; } };
