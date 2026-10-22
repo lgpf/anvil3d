@@ -3444,8 +3444,19 @@ async function colar() {
   alterar(() => { E.doc.objetos.push(...novos); E.sel = novos.map(n => n.id); });
 }
 
+// As setas seguem a vista: → move para a direita da tela e ↑ para "longe/cima" da tela, sempre no eixo X
+// ou Y da mesa mais parecido com essa direção (a peça continua andando na grade). Antes as setas
+// seguiam os eixos fixos da mesa e, olhando a peça "de ponta-cabeça", iam para o lado contrário.
 function moverTeclado(dx, dy, dz) {
   const sel = selecionados(); if (!sel.length) return;
+  if (dx || dy) {
+    // direita e "para cima" da tela, deitadas na mesa; "para cima" na tela = para longe, numa vista inclinada
+    const dir = new V3(1, 0, 0).applyQuaternion(camera.quaternion), cima = new V3(0, 1, 0).applyQuaternion(camera.quaternion);
+    if (Math.abs(cima.x) + Math.abs(cima.y) < 1e-3) cima.copy(new V3(0, 0, -1).applyQuaternion(camera.quaternion)); // olhando de lado
+    const xDir = Math.abs(dir.x) >= Math.abs(dir.y);   // a direita da tela fica no X da mesa (senão, no Y)
+    const sD = Math.sign(xDir ? dir.x : dir.y) || 1, sC = Math.sign(xDir ? cima.y : cima.x) || 1;
+    [dx, dy] = xDir ? [dx * sD, dy * sC] : [dy * sC, dx * sD];
+  }
   const passo = Number($('#passo-mov').value) || 0.1;
   alterar(() => sel.forEach(n => {
     const p = n.transformacao.posicao;

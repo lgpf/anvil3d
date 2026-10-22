@@ -426,10 +426,12 @@ export function ferramentas(wasm, feicoes, modo, medida, segmentos, base = null)
     if (f.convexa !== g.convexa) continue;
     const V = [f.a, f.b].find(p => chP(p) === chP(g.a) || chP(p) === chP(g.b)); if (!V) continue;
     const df = v.norm(v.sub(f.b, f.a)), dg = v.norm(v.sub(g.b, g.a));
-    if (Math.abs(v.dot(df, dg)) > Math.cos(40 * Math.PI / 180)) continue; // quase alinhadas: já viram cadeia
     // ângulo entre as arestas no canto (saindo do canto): em cantos agudos a peça de canto vira uma
     // lasca comprida que corta onde não devia — nesses casos é melhor não pôr peça de canto
     const sf = chP(f.a) === chP(V) ? df : v.mul(df, -1), sg = chP(g.a) === chP(V) ? dg : v.mul(dg, -1);
+    // uma continuando a outra (quase em linha reta): já viram cadeia. Antes o teste usava o valor absoluto
+    // e também pulava os cantos muito FECHADOS (ponta do furo do A), que ficavam sem peça de canto.
+    if (v.dot(sf, sg) < -Math.cos(40 * Math.PI / 180)) continue;
     // canto "para dentro" (a face de cima faz mais de 180° ali: quinas do furo do D, ponta do furo do A,
     // encontro da barra com as pernas): ali a peça de canto fica dentro do material e é necessária mesmo
     // com ângulo fechado; a lasca comprida só acontece nos cantos para fora (pontas)
@@ -437,19 +439,40 @@ export function ferramentas(wasm, feicoes, modo, medida, segmentos, base = null)
     for (const a of f.lados) for (const b of g.lados) { const d = v.dot(a.n, b.n); if (d > parecida) { parecida = d; lf = a; lg = b; } }
     const paraDentro = !!lf && v.dot(lf.u, sg) < -1e-6 && v.dot(lg.u, sf) < -1e-6;
     if (paraDentro && f.convexa) {
-      // Peça de canto girada em volta do canto: o mesmo perfil do acabamento, como se a aresta desse a volta
-      // no ponto. Ela nunca tira mais do que o acabamento ideal (cada ponto dela está a menos da medida do
-      // canto), e por isso funciona até com ângulo bem fechado (ponta do furo do A). A peça antiga, a
-      // intersecção das duas ferramentas prolongadas, nesses cantos virava uma lasca e cavava a face.
+      // Canto "para dentro" (quinas do furo do D, ponta do furo do A, encontro da barra com as pernas, o
+      // vão do V). A peça do canto é montada direto pelos planos, sem prolongar ferramentas (as margens do
+      // perfil, que ficam no ar ao longo da aresta, entravam no material depois do canto):
+      //  - chanfro: meia-esquadria com linhas retas, como numa moldura — atrás das duas paredes e acima
+      //    dos dois planos de chanfro;
+      //  - fillet: o mesmo perfil arredondado girado em volta do canto (o canto fica arredondado).
       try {
-        const n = v.norm(lf.n);
-        let b1 = Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]; b1 = v.norm(v.sub(b1, v.mul(n, v.dot(b1, n)))); const b2 = v.cross(n, b1);
-        const mg = Math.max(EPS * 2, medida * 0.3), pts = [[0, -medida]];
-        if (modo === 'chanfro') pts.push([medida, 0]);
-        else { const k = Math.max(8, Math.ceil(segmentos(medida) / 4)); for (let i = 1; i <= k; i++) { const a = Math.PI - (Math.PI / 2) * i / k; pts.push([medida + medida * Math.cos(a), -medida + medida * Math.sin(a)]); } }
-        pts.push([medida, mg], [0, mg]);
-        const cs = new CrossSection([pts], 'Positive'), rev = cs.revolve(Math.max(16, segmentos(medida))); cs.delete();
-        const canto = rev.transform([...b1, 0, ...b2, 0, ...n, 0, ...V, 1]); rev.delete();
+        const nT = v.norm(lf.n), wf = v.norm((f.lados.find(l => l !== lf) ?? f.lados[1]).n), wg = v.norm((g.lados.find(l => l !== lg) ?? g.lados[1]).n);
+        const ang = Math.acos(Math.max(-1, Math.min(1, v.dot(sf, sg))));
+        let canto;
+        if (modo === 'chanfro') {
+          const R = Math.min(medida * 12, medida / Math.sin(Math.max(0.05, ang) / 2) + medida) * 2;
+          // região do chanfro perto do canto, montada por planos (cada "plano" guarda um lado):
+          //  - a parte comum (atrás das duas paredes e acima dos dois planos de chanfro): a meia-esquadria;
+          //  - de cada aresta, a faixa dela que fica na frente da parede da outra (fecha a fresta entre a
+          //    ponta reta da ferramenta e a parede vizinha quando o canto não é de 90°)
+          const regiao = planos => {
+            let c = Manifold.cube([R, R, R], true).translate(V);
+            for (const [n, d] of planos) { const nn = v.norm(n), x = c.trimByPlane(nn, v.dot(nn, V) + d); c.delete(); c = x; if (c.isEmpty()) break; }
+            return c;
+          };
+          const kf = v.add(nT, wf), kg = v.add(nT, wg), base = [[nT, -medida * 1.02], [v.mul(nT, -1), -Math.max(EPS * 2, medida * 0.3)]];
+          const atrasF = [v.mul(wf, -1), -EPS], atrasG = [v.mul(wg, -1), -EPS], chF = [kf, -medida / v.len(kf)], chG = [kg, -medida / v.len(kg)];
+          const pecas = [regiao([...base, atrasF, atrasG, chF, chG]), regiao([...base, atrasF, chF, [wg, -EPS]]), regiao([...base, atrasG, chG, [wf, -EPS]])].filter(p => { if (p.isEmpty()) { p.delete(); return false; } return true; });
+          canto = Manifold.union(pecas); pecas.forEach(p => p.delete());
+        } else {
+          let b1 = Math.abs(nT[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]; b1 = v.norm(v.sub(b1, v.mul(nT, v.dot(b1, nT)))); const b2 = v.cross(nT, b1);
+          const mg = Math.max(EPS * 2, medida * 0.3), pts = [[0, -medida]];
+          const k = Math.max(8, Math.ceil(segmentos(medida) / 4));
+          for (let i = 1; i <= k; i++) { const a = Math.PI - (Math.PI / 2) * i / k; pts.push([medida + medida * Math.cos(a), -medida + medida * Math.sin(a)]); }
+          pts.push([medida, mg], [0, mg]);
+          const cs = new CrossSection([pts], 'Positive'), rev = cs.revolve(Math.max(16, segmentos(medida))); cs.delete();
+          canto = rev.transform([...b1, 0, ...b2, 0, ...nT, 0, ...V, 1]); rev.delete();
+        }
         if (canto.isEmpty()) canto.delete(); else cortes.push(marcar(canto, V));
       } catch (e) { erros.push(e.message ?? String(e)); }
       continue;
