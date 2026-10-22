@@ -65,7 +65,17 @@
           ]
         }
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "extraFiles": [
+        {
+          "from": "LICENSE",
+          "to": "LICENSE"
+        },
+        {
+          "from": "EXCECAO-PLUGINS.md",
+          "to": "EXCECAO-PLUGINS.md"
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -85,16 +95,6 @@
       "en-US"
     ],
     "copyright": "© 2026 Luiz Pacheco · nobetteridea.com",
-    "extraFiles": [
-      {
-        "from": "LICENSE",
-        "to": "LICENSE"
-      },
-      {
-        "from": "EXCECAO-PLUGINS.md",
-        "to": "EXCECAO-PLUGINS.md"
-      }
-    ],
     "mac": {
       "target": [
         {
@@ -116,7 +116,17 @@
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "artifactName": "${productName}-Mac-${version}.${ext}",
-      "darkModeSupport": true
+      "darkModeSupport": true,
+      "extraResources": [
+        {
+          "from": "LICENSE",
+          "to": "LICENSE"
+        },
+        {
+          "from": "EXCECAO-PLUGINS.md",
+          "to": "EXCECAO-PLUGINS.md"
+        }
+      ]
     },
     "dmg": {
       "title": "Anvil3D ${version}",
