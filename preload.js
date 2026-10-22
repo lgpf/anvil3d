@@ -28,4 +28,8 @@ contextBridge.exposeInMainWorld('anvil', {
   perguntarSalvar: () => ipcRenderer.invoke('app:perguntarSalvar'),
   ultimaRelease: () => ipcRenderer.invoke('app:ultimaRelease'),
   fecharAgora: () => ipcRenderer.send('app:fecharAgora'),
+  plataforma: process.platform,
+  aoMenu: cb => ipcRenderer.on('app:menu', (_, c) => cb(c)),
+  aoAbrirArquivo: cb => ipcRenderer.on('app:abrirArquivo', (_, c) => cb(c)),
+  editarTexto: acao => ipcRenderer.send('app:editarTexto', acao),
 });

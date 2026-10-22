@@ -16,7 +16,8 @@
     "test": "node test/nucleo.test.mjs",
     "predist": "node scripts/vendor.mjs",
     "dist": "electron-builder --win --x64 --publish never",
-    "icone": "node scripts/icone/modelo.mjs && electron scripts/icone/render.js && python scripts/icone/enquadrar.py"
+    "icone": "node scripts/icone/modelo.mjs && electron scripts/icone/render.js && python scripts/icone/enquadrar.py",
+    "dist:mac": "electron-builder --mac --universal --publish never"
   },
   "devDependencies": {
     "electron": "44.7.2",
@@ -93,7 +94,34 @@
         "from": "EXCECAO-PLUGINS.md",
         "to": "EXCECAO-PLUGINS.md"
       }
-    ]
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "build/icone-1024.png",
+      "category": "public.app-category.graphics-design",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "artifactName": "${productName}-Mac-${version}.${ext}",
+      "darkModeSupport": true
+    },
+    "dmg": {
+      "title": "Anvil3D ${version}",
+      "artifactName": "${productName}-Mac-${version}.${ext}"
+    }
   },
   "homepage": "https://github.com/lgpf/anvil3d",
   "repository": {

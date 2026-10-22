@@ -13,6 +13,12 @@ import { abrirEditor2D, amostrarPerfil, textoDoPerfil } from './editor2d.mjs';
 import { MotorGeometria, dadosMalha } from './core/geometria.mjs';
 import { VERSAO as VERSAO_DOC, serializarPeca, lerPeca, novoDocumento, novaForma, novoGrupo, novoAcabamento, novaMalha, serializar, carregarDocumento, clonarComNovosIds } from './core/documento.mjs';
 import { Historico } from './core/historico.mjs';
+
+// macOS: Cmd faz o papel do Ctrl (Ctrl+clique no Mac é o botão direito); atalhos mostrados como ⌘ e ⇧
+const MAC = window.anvil?.plataforma === 'darwin';
+const modClique = e => (MAC ? e.metaKey : e.ctrlKey);
+const textoMac = t => (MAC && t ? t.replace(/Ctrl\s*\+\s*Shift\s*\+\s*/g, '⇧⌘').replace(/Ctrl\s*\+\s*/g, '⌘').replace(/Ctrl(?=[\s+]|$)/g, '⌘').replace(/⌘Y\b/g, '⇧⌘Z') : t);
+if (MAC) document.documentElement.classList.add('mac');
 import { stlBinario } from './core/stl.mjs';
 import { avaliar } from './core/expressao.mjs';
 import { tr, tt, definirIdioma, idiomaAtual, decimal, inteiro } from './core/i18n.mjs';
@@ -617,7 +623,7 @@ function clicarME(e) {
     const hits = ray.intersectObject(pts, false);
     if (!hits.length) return;
     const h = hits.reduce((a, b) => (b.distanceToRay < a.distanceToRay ? b : a));
-    if (e.shiftKey || e.ctrlKey) { if (ME.selV.has(h.index)) ME.selV.delete(h.index); else ME.selV.add(h.index); }
+    if (e.shiftKey || modClique(e)) { if (ME.selV.has(h.index)) ME.selV.delete(h.index); else ME.selV.add(h.index); }
     else ME.selV = ME.selV.has(h.index) && ME.selV.size === 1 ? new Set() : new Set([h.index]);
   }
   montarOverlay(); montarPainel();
@@ -997,7 +1003,7 @@ function clicarJF(e) {
   const R = new THREE.Matrix4().makeRotationFromQuaternion(q);
   const giro = new THREE.Matrix4().makeTranslation(o.c.x, o.c.y, o.c.z).multiply(R).multiply(new THREE.Matrix4().makeTranslation(-o.c.x, -o.c.y, -o.c.z));
   const desl = a.c.clone().sub(o.c);
-  if (e.ctrlKey) desl.copy(a.n).multiplyScalar(desl.dot(a.n)); // só encosta
+  if (modClique(e)) desl.copy(a.n).multiplyScalar(desl.dot(a.n)); // só encosta
   const T = new THREE.Matrix4().makeTranslation(desl.x, desl.y, desl.z).multiply(giro);
   const ids = [...E.sel], origem = JF.origem;
   const contato = o.c.clone().add(desl);
@@ -1016,7 +1022,7 @@ function clicarJF(e) {
     }
   });
   const graus = 2 * Math.acos(Math.min(1, Math.abs(q.w))) * GRAU;
-  mensagem(tt`Faces juntadas${graus > 0.05 ? tt` (girou ${fmt(graus, 1)}°)` : ''}${e.ctrlKey ? tr(', posição lateral mantida') : tr(', centros alinhados')}.` + (tinhaJuncao ? ' ' + tr('A junção anterior desta peça foi trocada por esta.') : ''));
+  mensagem(tt`Faces juntadas${graus > 0.05 ? tt` (girou ${fmt(graus, 1)}°)` : ''}${modClique(e) ? tr(', posição lateral mantida') : tr(', centros alinhados')}.` + (tinhaJuncao ? ' ' + tr('A junção anterior desta peça foi trocada por esta.') : ''));
   if (unico) iniciarAlinhar(unico);
 }
 renderer.domElement.addEventListener('pointermove', e => { if (JF && !e.buttons) hoverJF(e); });
@@ -1804,7 +1810,7 @@ renderer.domElement.addEventListener('pointerup', e => {
   const r = renderer.domElement.getBoundingClientRect();
   const [xa, xb] = [Math.min(c.x0, e.clientX), Math.max(c.x0, e.clientX)], [ya, yb] = [Math.min(c.y0, e.clientY), Math.max(c.y0, e.clientY)];
   const dentro = v => { const q = v.clone().project(camera); const x = r.left + (q.x + 1) / 2 * r.width, y = r.top + (1 - q.y) / 2 * r.height; return q.z < 1 && x >= xa && x <= xb && y >= ya && y <= yb; };
-  const tirar = e.ctrlKey;
+  const tirar = modClique(e);
   if (ME) {
     const no = noPorId(ME.id), d = lerMalha(no), M = malhas.get(no.id).matrixWorld, cam = camera.position;
     const P = i => new THREE.Vector3(d.v[i * 3], d.v[i * 3 + 1], d.v[i * 3 + 2]).applyMatrix4(M);
@@ -1893,7 +1899,9 @@ function abrirModal(tituloTxt, conteudo, pequena = false) {
 function fecharModal() { modal.hidden = true; modal.querySelector('.conteudo-modal').replaceChildren(); }
 modal.addEventListener('click', e => { if (e.target === modal || e.target.closest('[data-fechar]')) fecharModal(); });
 function abrirAjuda(secao = 'inicio') {
-  abrirModal(tr('Manual do Anvil3D'), el('iframe', { src: `${idiomaAtual() === 'en' ? 'ajuda-en.html' : 'ajuda.html'}#${secao}`, title: tr('Manual') }));
+  const f = el('iframe', { src: `${idiomaAtual() === 'en' ? 'ajuda-en.html' : 'ajuda.html'}#${secao}`, title: tr('Manual') });
+  if (MAC) f.addEventListener('load', () => { try { for (const k of f.contentDocument.querySelectorAll('kbd')) if (k.textContent === 'Ctrl') k.textContent = '⌘'; } catch {} });
+  abrirModal(tr('Manual do Anvil3D'), f);
 }
 function pedirTexto(tituloTxt, rotulo, valor) {
   return new Promise(ok => {
@@ -2611,7 +2619,7 @@ const arred = (v, d = 4) => { const r = Math.round(v * 10 ** d) / 10 ** d; retur
 const normAng = a => { a = ((a + 180) % 360 + 360) % 360 - 180; return a === -180 ? 180 : a; };
 function fmt(v, casas = 2) { return decimal(v, casas); }
 const lerNumero = avaliar;
-function mensagem(txt, erro = false) { const m = $('#msg'); m.textContent = txt; m.classList.toggle('erro', erro); }
+function mensagem(txt, erro = false) { const m = $('#msg'); m.textContent = textoMac(txt); m.classList.toggle('erro', erro); }
 const noPorId = id => E.doc.objetos.find(o => o.id === id);
 const selecionados = () => E.sel.map(noPorId).filter(Boolean);
 
@@ -2952,7 +2960,7 @@ function atualizarSetaZ() {
   setaZ.position.copy(topo).add(new V3(0, 0, k * 0.35)); setaZ.scale.setScalar(k);
 }
 renderer.domElement.addEventListener('pointerdown', e => {
-  if (e.button !== 0 || e.shiftKey || e.ctrlKey || !podeMoverPeca()) return;
+  if (e.button !== 0 || e.shiftKey || modClique(e) || !podeMoverPeca()) return;
   const r = raioDoMouse(e);
   let modoZ = false, ponto, ids;
   if (setaZ.visible && r.intersectObject(setaZ, true).length) { modoZ = true; ids = [...E.sel]; ponto = setaZ.position.clone(); }
@@ -3027,7 +3035,7 @@ renderer.domElement.addEventListener('pointerup', e => {
   else if (TX) { clicarTX(e); agendarPreviaTX(); return; }
   const id = hit?.object.userData.id;
   if (!id) { if (!e.shiftKey) E.sel = []; }
-  else if (e.shiftKey || e.ctrlKey) E.sel = E.sel.includes(id) ? E.sel.filter(x => x !== id) : [...E.sel, id];
+  else if (e.shiftKey || modClique(e)) E.sel = E.sel.includes(id) ? E.sel.filter(x => x !== id) : [...E.sel, id];
   else if (E.sel.length === 1 && E.sel[0] === id) {
     definirModoGizmo(E.modoGizmo === 'girar' ? 'mover' : 'girar'); montarPainel();
     mensagem(E.modoGizmo === 'girar' ? tr('Modo girar: arraste os anéis. Clique de novo na peça para mover.') : tr('Modo mover.'));
@@ -4320,7 +4328,7 @@ document.addEventListener('keydown', e => {
   const k = e.key.toLowerCase(), c = e.ctrlKey || e.metaKey;
   const atalho = (
     c && e.shiftKey && k === 's' ? salvarComo : c && k === 's' ? salvar : c && k === 'o' ? abrir : c && k === 'n' ? novo :
-    c && k === 'e' ? exportarStl : c && k === 'z' ? comandos.desfazer : c && k === 'y' ? comandos.refazer :
+    c && k === 'e' ? exportarStl : c && e.shiftKey && k === 'z' ? comandos.refazer : c && k === 'z' ? comandos.desfazer : c && k === 'y' ? comandos.refazer :
     c && k === 'd' ? duplicar : c && e.shiftKey && k === 'g' ? desagrupar : c && k === 'g' ? agrupar :
     c && k === 'c' ? copiar : c && k === 'v' ? colar : c && k === 'x' ? recortar : c && k === 'a' ? () => { E.sel = E.doc.objetos.map(o => o.id); atualizarVisual(); montarPainel(); } :
     c && k === 'i' ? importarStl : !c && k === 'r' ? comandos.alternarGizmo : !c && e.shiftKey && k === 'j' ? comandos.soltarJuncao : !c && k === 'b' ? comandos.faceNaMesa : !c && k === 'l' ? comandos.alinhar : !c && k === 'm' ? comandos.espelharModo : c && k === 'k' ? consolidar : !c && k === 'j' ? () => { if (!e.repeat) entrarJF(true); } : !c && k === 't' ? comandos.verTriangulos :
@@ -4349,14 +4357,14 @@ function traduzirEstatico() {
     if (!n.data.trim() || fixo(n.parentElement)) continue;
     if (!originais.has(n)) originais.set(n, n.data);
     const o = originais.get(n), k = o.trim();
-    n.data = o.replace(k, tr(k));
+    n.data = textoMac(o.replace(k, tr(k)));
   }
   for (const e of document.querySelectorAll('[title], [aria-label], [placeholder]')) {
     if (fixo(e)) continue;
     for (const a of ['title', 'aria-label', 'placeholder']) {
       if (!e.hasAttribute(a)) continue;
       if (!e.hasAttribute('data-pt-' + a)) e.setAttribute('data-pt-' + a, e.getAttribute(a));
-      e.setAttribute(a, tr(e.getAttribute('data-pt-' + a)));
+      e.setAttribute(a, textoMac(tr(e.getAttribute('data-pt-' + a))));
     }
   }
   $('#bt-pt')?.classList.toggle('ativo', idiomaAtual() === 'pt');
@@ -4371,6 +4379,28 @@ function trocarIdioma(l) {
   mensagem(tr('Pronto.'));
 }
 comandos.idiomaPt = () => trocarIdioma('pt');
+
+// macOS: comandos vindos do menu da barra do sistema
+const TEXTO_NATIVO = { desfazer: 'undo', refazer: 'redo', recortar: 'cut', copiar: 'copy', colar: 'paste', selecionarTudo: 'selectAll' };
+anvil.aoMenu?.(c => {
+  const alvo = document.activeElement;
+  if (TEXTO_NATIVO[c] && alvo?.matches?.('input, textarea, [contenteditable="true"]')) return anvil.editarTexto(TEXTO_NATIVO[c]);
+  if (!modal.hidden) {
+    // janelas internas (ex.: editor 2D) recebem o atalho como se fosse Ctrl+tecla
+    const tecla = { desfazer: 'z', refazer: 'y', recortar: 'x', copiar: 'c', colar: 'v', selecionarTudo: 'a' }[c];
+    if (tecla) return (alvo || document).dispatchEvent(new KeyboardEvent('keydown', { key: tecla, ctrlKey: true, bubbles: true }));
+    if (c !== 'ajuda' && c !== 'sobre') return;
+    fecharModal();
+  }
+  if (c === 'selecionarTudo') { E.sel = E.doc.objetos.map(o => o.id); atualizarVisual(); montarPainel(); return; }
+  if (c === 'preferencias') return $('#menu-preferencias')?.click();
+  const f = { desfazer: comandos.desfazer, refazer: comandos.refazer, recortar, copiar, colar, sobre: comandos.sobre, ajuda: () => abrirAjuda() }[c];
+  if (f) { if (c !== 'sobre' && c !== 'ajuda') encerrarModos(null); f(); }
+});
+anvil.aoAbrirArquivo?.(async c => {
+  if (!(await confirmarDescarte())) return;
+  try { abrirArquivo(await anvil.ler(c)); } catch (e) { mensagem(tt`Não foi possível abrir ${c}: ${e.message ?? e}`, true); }
+});
 comandos.idiomaEn = () => trocarIdioma('en');
 anvil.definirIdioma(idiomaAtual());
 traduzirEstatico();

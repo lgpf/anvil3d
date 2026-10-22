@@ -65,3 +65,15 @@ O Anvil3D é software livre sob a **GNU General Public License v3.0 ou posterior
 Plugins que usam apenas a API pública de plugins podem usar **qualquer licença** — veja `EXCECAO-PLUGINS.md`.
 
 Criado por **Luiz Pacheco** · luizgpf@gmail.com · [nobetteridea.com](https://nobetteridea.com) · © 2026
+
+## macOS
+
+Baixe o `Anvil3D-Mac-<versão>.dmg` na página de releases e arraste o Anvil3D para Aplicativos. Funciona em Macs Intel e Apple Silicon.
+
+O app não é assinado pela Apple. Na primeira vez, clique com o botão direito no Anvil3D e escolha **Abrir**. Se o macOS disser que o app está "danificado", rode no Terminal:
+
+```
+xattr -cr /Applications/Anvil3D.app
+```
+
+No Mac, os atalhos usam ⌘ no lugar de Ctrl (⌘+clique para somar à seleção).

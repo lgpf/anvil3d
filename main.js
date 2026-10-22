@@ -51,7 +51,47 @@ function listarMjs(dir) {
 }
 
 function arquivoInicial(argv) {
-  return argv.slice(1).find(a => /\.(nvl3d|anvil)$/i.test(a) && fs.existsSync(a)) || null;
+  return arquivoMac || argv.slice(1).find(a => /\.(nvl3d|anvil)$/i.test(a) && fs.existsSync(a)) || null;
+}
+
+// macOS: o Finder entrega o arquivo pelo evento open-file (não pela linha de comando)
+const MAC = process.platform === 'darwin';
+let arquivoMac = null, janelaPronta = false;
+app.on('open-file', (e, caminho) => {
+  e.preventDefault();
+  if (janelaPronta && janela && !janela.isDestroyed()) { lembrar(caminho); janela.webContents.send('app:abrirArquivo', caminho); }
+  else arquivoMac = caminho;
+});
+
+// macOS: menu na barra do sistema. Os atalhos de edição passam pela janela, que decide
+// se é texto (campo de digitação) ou objeto 3D.
+const MENU_TXT = {
+  pt: { sobre: 'Sobre o Anvil3D', prefs: 'Preferências…', ocultar: 'Ocultar Anvil3D', ocultarOutros: 'Ocultar outros', mostrarTodos: 'Mostrar todos', sair: 'Sair do Anvil3D',
+        editar: 'Editar', desfazer: 'Desfazer', refazer: 'Refazer', recortar: 'Recortar', copiar: 'Copiar', colar: 'Colar', tudo: 'Selecionar tudo', janela: 'Janela', ajuda: 'Ajuda', manual: 'Manual do Anvil3D' },
+  en: { sobre: 'About Anvil3D', prefs: 'Preferences…', ocultar: 'Hide Anvil3D', ocultarOutros: 'Hide Others', mostrarTodos: 'Show All', sair: 'Quit Anvil3D',
+        editar: 'Edit', desfazer: 'Undo', refazer: 'Redo', recortar: 'Cut', copiar: 'Copy', colar: 'Paste', tudo: 'Select All', janela: 'Window', ajuda: 'Help', manual: 'Anvil3D Manual' },
+};
+function montarMenuMac() {
+  if (!MAC) return;
+  const m = MENU_TXT[idioma], cmd = c => () => janela?.webContents.send('app:menu', c);
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { label: 'Anvil3D', submenu: [
+      { label: m.sobre, click: cmd('sobre') }, { type: 'separator' },
+      { label: m.prefs, accelerator: 'Cmd+,', click: cmd('preferencias') }, { type: 'separator' },
+      { label: m.ocultar, role: 'hide' }, { label: m.ocultarOutros, role: 'hideOthers' }, { label: m.mostrarTodos, role: 'unhide' }, { type: 'separator' },
+      { label: m.sair, accelerator: 'Cmd+Q', click: () => janela ? janela.close() : app.quit() },
+    ] },
+    { label: m.editar, submenu: [
+      { label: m.desfazer, accelerator: 'Cmd+Z', click: cmd('desfazer') },
+      { label: m.refazer, accelerator: 'Cmd+Shift+Z', click: cmd('refazer') }, { type: 'separator' },
+      { label: m.recortar, accelerator: 'Cmd+X', click: cmd('recortar') },
+      { label: m.copiar, accelerator: 'Cmd+C', click: cmd('copiar') },
+      { label: m.colar, accelerator: 'Cmd+V', click: cmd('colar') },
+      { label: m.tudo, accelerator: 'Cmd+A', click: cmd('selecionarTudo') },
+    ] },
+    { label: m.janela, role: 'windowMenu' },
+    { label: m.ajuda, role: 'help', submenu: [{ label: m.manual, click: cmd('ajuda') }] },
+  ]));
 }
 
 // textos dos diálogos do sistema (o idioma vem da janela)
@@ -64,11 +104,14 @@ const txt = () => TXT[idioma];
 let janela, estado = { sujo: false, titulo: 'Anvil3D' }, fecharForcado = false;
 
 function criarJanela() {
+  fecharForcado = false;
   janela = new BrowserWindow({
     width: 1400, height: 900, minWidth: 900, minHeight: 600, title: 'Anvil3D', show: false, backgroundColor: '#e3e8ea', icon: path.join(__dirname, 'app', 'icone.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true },
   });
   janela.once('ready-to-show', () => janela.show());
+  janela.webContents.once('did-finish-load', () => { janelaPronta = true; });
+  janela.on('closed', () => { janela = null; janelaPronta = false; });
   janela.loadURL('app://anvil/app/index.html');
   // links externos (e-mail, sites) abrem fora do programa
   janela.webContents.setWindowOpenHandler(({ url }) => {
@@ -131,7 +174,7 @@ function limparCodigoColado(t) {
 const FILTRO_PROJETO = () => [{ name: txt().projeto, extensions: ['nvl3d', 'anvil'] }];
 
 app.whenReady().then(() => {
-  Menu.setApplicationMenu(null);
+  if (MAC) montarMenuMac(); else Menu.setApplicationMenu(null);
   try { prepararPastaPlugins(); } catch (e) { console.error(e); }
 
   protocol.handle('app', async req => {
@@ -168,6 +211,7 @@ app.whenReady().then(() => {
   ipcMain.handle('pasta:locais', () => {
     const unidades = process.platform === 'win32'
       ? 'CDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(l => l + ':\\').filter(u => { try { return fs.existsSync(u); } catch { return false; } })
+      : MAC ? ['/', ...(() => { try { return fs.readdirSync('/Volumes').filter(n => !n.startsWith('.')).map(n => '/Volumes/' + n).filter(v => { try { return fs.realpathSync(v) !== '/'; } catch { return false; } }); } catch { return []; } })()]
       : ['/'];
     const locais = [
       { id: 'anvil', caminho: pastaUsuario() },
@@ -190,6 +234,7 @@ app.whenReady().then(() => {
   ipcMain.handle('fontes:sistema', () => {
     const dirs = process.platform === 'win32'
       ? [path.join(process.env.WINDIR || 'C:\\Windows', 'Fonts'), path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'Windows', 'Fonts')]
+      : MAC ? ['/System/Library/Fonts', '/Library/Fonts', path.join(app.getPath('home'), 'Library', 'Fonts')]
       : ['/usr/share/fonts', path.join(app.getPath('home'), '.fonts')];
     const achadas = [], visto = new Set();
     const andar = (d, prof = 0) => { try { for (const e of fs.readdirSync(d, { withFileTypes: true })) {
@@ -291,10 +336,13 @@ app.whenReady().then(() => {
     estado = s;
     janela?.setTitle(`${s.sujo ? '● ' : ''}${s.titulo} — Anvil3D`);
   });
-  ipcMain.on('app:idioma', (_, l) => { idioma = l === 'en' ? 'en' : 'pt'; });
+  ipcMain.on('app:idioma', (_, l) => { const novo = l === 'en' ? 'en' : 'pt'; if (novo !== idioma) { idioma = novo; montarMenuMac(); } });
+  // edição nativa de texto (campos de digitação) pedida pela janela no macOS
+  ipcMain.on('app:editarTexto', (e, acao) => { if (['undo', 'redo', 'cut', 'copy', 'paste', 'selectAll'].includes(acao)) e.sender[acao](); });
   ipcMain.on('app:fecharAgora', () => { fecharForcado = true; janela?.close(); });
 
   criarJanela();
 });
 
 app.on('window-all-closed', () => app.quit());
+app.on('activate', () => { if (!janela && app.isReady()) criarJanela(); });
