@@ -308,3 +308,11 @@ input.cota.proporcional { outline-color: #2a7fd4; }
 .seletor-cor .sc-dica { margin-top: 6px; font-size: 11px; opacity: .7; }
 .linha-imagem { display: flex; gap: 16px; align-items: flex-start; } .prev-imagem { max-width: 260px; border: 1px solid var(--linha); image-rendering: pixelated; } .opcoes-imagem { min-width: 260px; }
 #aviso-versao { position: fixed; right: 16px; bottom: 40px; z-index: 2500; display: flex; gap: 10px; align-items: center; padding: 10px 12px; background: var(--fundo, #fff); border: 1px solid var(--linha); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.16); font-size: 13px; }
+
+/* aviso de processamento (cenas pesadas): aparece só se a espera passar de ~0,2 s */
+#ocupado { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; background: rgba(20, 28, 32, 0.18); cursor: progress; opacity: 0; animation: ocupado-entra 0.15s 0.2s forwards; }
+#ocupado[hidden] { display: none; }
+#ocupado .ocupado-caixa { display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: var(--fundo, #fff); color: var(--tinta, #222); border: 1px solid var(--linha, #ccc); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18); }
+#ocupado .ocupado-roda { width: 22px; height: 22px; border: 3px solid rgba(0, 0, 0, 0.12); border-top-color: #2f6f8f; border-radius: 50%; animation: ocupado-gira 0.8s linear infinite; will-change: transform; }
+@keyframes ocupado-entra { to { opacity: 1; } }
+@keyframes ocupado-gira { to { transform: rotate(360deg); } }

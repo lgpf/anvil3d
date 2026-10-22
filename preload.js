@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('anvil', {
   exportar: (sugestao, bytes, ext, rotulo) => ipcRenderer.invoke('arquivo:exportar', sugestao, bytes, ext, rotulo),
   exportarVarios: arquivos => ipcRenderer.invoke('arquivo:exportarVarios', arquivos),
   importar: () => ipcRenderer.invoke('arquivo:importar'),
+  escolherExportacao: (sugestao, preferido) => ipcRenderer.invoke('arquivo:escolherExportacao', sugestao, preferido),
+  gravarBinario: (caminho, bytes) => ipcRenderer.invoke('arquivo:gravarBinario', caminho, bytes),
   listarPecas: () => ipcRenderer.invoke('pecas:listar'),
   salvarPeca: (nome, texto) => ipcRenderer.invoke('pecas:salvar', nome, texto),
   abrirPastaPecas: () => ipcRenderer.invoke('pecas:abrirPasta'),

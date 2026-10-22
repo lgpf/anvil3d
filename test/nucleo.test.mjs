@@ -12,6 +12,7 @@ import { stlBinario } from '../app/core/stl.mjs';
 import { extrairArestas, descritor } from '../app/core/arestas.mjs';
 import { novoAcabamento, novaMalha } from '../app/core/documento.mjs';
 import * as M from '../app/core/malha.mjs';
+import { lerObj, escreverObj, ler3mf, escrever3mf } from '../app/core/formatos.mjs';
 import { MeshoptSimplifier } from '../node_modules/meshoptimizer/meshopt_simplifier.js';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -136,6 +137,16 @@ console.log('Reparo para impressão:');
   const r = M.reparar(wasm, sopa);
   const vol = M.paraManifold(wasm, r.dados).volume(), esp = 12000 + 8000 + Manifold.cylinder(10, 5, 5, 32).volume();
   ok(r.fechada && M.diagnosticar(r.dados).ok && perto(vol, esp, 0.5), `reparado: ${r.relatorio.length} correções, volume ${vol.toFixed(1)} (esperado ${esp.toFixed(1)})`);
+}
+
+{
+  console.log('formatos OBJ e 3MF');
+  const cubo = { posicoes: new Float32Array([0,0,0,10,0,0,10,10,0,0,10,0,0,0,10,10,0,10,10,10,10,0,10,10]),
+    indices: new Uint32Array([0,2,1,0,3,2,4,5,6,4,6,7,0,1,5,0,5,4,1,2,6,1,6,5,2,3,7,2,7,6,3,0,4,3,4,7]) };
+  const o = lerObj(escreverObj(cubo));
+  ok(o.v.length === 24 && o.t.length === 36 && M.diagnosticar(o).ok, 'OBJ: ida e volta mantém o cubo fechado');
+  const r = await ler3mf(await escrever3mf([{ nome: 'a', cor: '#ff0000', dados: cubo }, { nome: 'b', cor: '#00ff00', dados: cubo }]));
+  ok(r.length === 2 && r[1].nome === 'b' && r.every(x => x.d.t.length === 36 && M.diagnosticar(x.d).ok), '3MF: duas peças, nomes e malhas preservados');
 }
 
 console.log(falhas ? `\n${falhas} falha(s)` : '\nTudo certo.');

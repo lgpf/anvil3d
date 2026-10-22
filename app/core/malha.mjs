@@ -175,10 +175,12 @@ export async function simplificar(Simplificador, d, { proporcao = 0.5, erroMax =
 export function lerStl(bytes) {
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const binario = bytes.length >= 84 && 84 + dv.getUint32(80, true) * 50 === bytes.length;
-  const v = [];
+  let v = [];
   if (binario) {
+    // arquivos grandes (milhões de triângulos): array já no tamanho certo, sem push
     const n = dv.getUint32(80, true);
-    for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++) for (let j = 0; j < 3; j++) v.push(dv.getFloat32(84 + i * 50 + 12 + k * 12 + j * 4, true));
+    v = new Float32Array(n * 9);
+    for (let i = 0, o = 0; i < n; i++) for (let k = 0; k < 3; k++) for (let j = 0; j < 3; j++) v[o++] = dv.getFloat32(84 + i * 50 + 12 + k * 12 + j * 4, true);
   } else {
     const txt = new TextDecoder().decode(bytes);
     const re = /vertex\s+([-+\d.eE]+)\s+([-+\d.eE]+)\s+([-+\d.eE]+)/g;
@@ -186,7 +188,7 @@ export function lerStl(bytes) {
     if (!v.length) throw new Error(tr('arquivo STL vazio ou inválido'));
   }
   const t = new Uint32Array(v.length / 3).map((_, i) => i);
-  return soldar({ v: new Float32Array(v), t });
+  return soldar({ v: v instanceof Float32Array ? v : new Float32Array(v), t });
 }
 
 // Divide uma malha não indexada (3 vértices por triângulo, na ordem) em regiões planas.

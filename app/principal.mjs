@@ -20,6 +20,7 @@ const modClique = e => (MAC ? e.metaKey : e.ctrlKey);
 const textoMac = t => (MAC && t ? t.replace(/Ctrl\s*\+\s*Shift\s*\+\s*/g, '⇧⌘').replace(/Ctrl\s*\+\s*/g, '⌘').replace(/Ctrl(?=[\s+]|$)/g, '⌘').replace(/⌘Y\b/g, '⇧⌘Z') : t);
 if (MAC) document.documentElement.classList.add('mac');
 import { stlBinario } from './core/stl.mjs';
+import { lerObj, escreverObj, ler3mf, escrever3mf } from './core/formatos.mjs';
 import { avaliar } from './core/expressao.mjs';
 import { tr, tt, definirIdioma, idiomaAtual, decimal, inteiro } from './core/i18n.mjs';
 definirIdioma(localStorage.getItem('idioma') || 'pt');
@@ -886,7 +887,22 @@ async function importarStl() {
   novaPecaPreparar();
   const r = await anvil.importar();
   if (!r) return;
-  importarStls(Array.isArray(r) ? r : [r]);
+  await importarMalhas(Array.isArray(r) ? r : [r]);
+}
+// Lê STL, OBJ e 3MF (um 3MF pode trazer várias peças) e manda tudo para importarStls.
+async function importarMalhas(arquivos, pontoSoltar = null) {
+  return comAviso(tr('Lendo malha…'), async () => {
+    const lidos = [];
+    for (const r of arquivos) {
+      const ext = (r.ext ?? r.nome.match(/\.(\w+)$/)?.[1] ?? 'stl').toLowerCase(), bytes = new Uint8Array(r.bytes);
+      try {
+        if (ext === '3mf') { const pecas = await ler3mf(bytes); pecas.forEach((p, i) => lidos.push({ nome: p.nome || (pecas.length > 1 ? `${r.nome} ${i + 1}` : r.nome), d: p.d })); }
+        else if (ext === 'obj') lidos.push({ nome: r.nome, d: lerObj(bytes) });
+        else lidos.push({ nome: r.nome, bytes });
+      } catch (e) { lidos.push({ nome: r.nome, erro: e.message }); }
+    }
+    importarStls(lidos, pontoSoltar);
+  });
 }
 // Importa um ou vários STL (do diálogo ou arrastados para a vista), cada um como objeto independente.
 // Vários de uma vez ficam lado a lado no centro da mesa, sem se sobrepor; um só que já cabe na mesa
@@ -895,7 +911,8 @@ function importarStls(arquivos, pontoSoltar = null) {
   const novos = [], erros = [], avisos = [];
   for (const r of arquivos) {
     let d;
-    try { d = lerStl(new Uint8Array(r.bytes)); } catch (e) { erros.push(r.nome + ': ' + e.message); continue; }
+    if (r.erro) { erros.push(r.nome + ': ' + r.erro); continue; }
+    try { d = r.d ?? lerStl(new Uint8Array(r.bytes)); } catch (e) { erros.push(r.nome + ': ' + e.message); continue; }
     const b = new THREE.Box3().setFromBufferAttribute(new THREE.BufferAttribute(d.v, 3)), c = b.getCenter(new THREE.Vector3());
     const naMesa = arquivos.length === 1 && !pontoSoltar && b.min.x >= -0.01 && b.min.y >= -0.01 && b.max.x <= mesaX + 0.01 && b.max.y <= mesaY + 0.01 && (!mesaRedonda || [[b.min.x, b.min.y], [b.max.x, b.min.y], [b.min.x, b.max.y], [b.max.x, b.max.y]].every(([x, y]) => Math.hypot(x - mesaX / 2, y - mesaY / 2) <= mesaX / 2 + 0.01)) && b.min.z >= -0.01;
     for (let i = 0; i < d.v.length; i += 3) { d.v[i] -= c.x; d.v[i + 1] -= c.y; d.v[i + 2] -= b.min.z; }
@@ -920,7 +937,7 @@ function importarStls(arquivos, pontoSoltar = null) {
     const n = novos[0];
     mensagem(tt`${n.no.nome}: ${fmtInt(n.tri)} triângulos importados.${!avisos.length ? tr(' Malha boa para impressão.') : tr(' A malha tem problemas: veja "Impressão 3D" no painel e use Reparar.')}`, !!avisos.length);
   } else if (novos.length || erros.length) {
-    mensagem(tt`${novos.length} STL importado(s).` + (avisos.length ? ' ' + tt`Com problemas de malha: ${avisos.join(', ')}.` : '') + (erros.length ? ' ' + tt`Não lidos: ${erros.join('; ')}` : ''), !!(erros.length || avisos.length));
+    mensagem(tt`${novos.length} malha(s) importada(s).` + (avisos.length ? ' ' + tt`Com problemas de malha: ${avisos.join(', ')}.` : '') + (erros.length ? ' ' + tt`Não lidos: ${erros.join('; ')}` : ''), !!(erros.length || avisos.length));
   }
 }
 const fmtInt = n => inteiro(n);
@@ -2221,13 +2238,51 @@ function calcularProjecao(A, B, dirMundo = null, finura = 180, op = {}) {
       // plano: a peça inteira só desce até encostar no ponto central, sem se deformar
       const hc = amostra((mn[u] + mx[u]) / 2, (mn[v] + mx[v]) / 2);
       res = fino.warp(p => { const t = (fundo - p[k]) * s; p[k] = hc - s * (t - embute); });
-    } else res = fino.warp(p => {
-      const t = (fundo - p[k]) * s, off = t - embute;
-      const pu = inverso(AU, AU0 + (p[u] - uc), u0), pv = inverso(AV, AV0 + (p[v] - vc), v0);
-      const h = amostra(pu, pv), hu = (amostra(pu + passo, pv) - amostra(pu - passo, pv)) / (2 * passo), hv = (amostra(pu, pv + passo) - amostra(pu, pv - passo)) / (2 * passo);
-      const L = Math.hypot(hu, hv, 1), o = -s; // normal para o lado de fora (onde está a peça)
-      p[u] = pu + o * (-hu / L) * off; p[v] = pv + o * (-hv / L) * off; p[k] = h + o * (1 / L) * off;
-    });
+    } else {
+      const o = -s; // normal para o lado de fora (onde está a peça)
+      const normal = (pu, pv) => {
+        const hu = (amostra(pu + passo, pv) - amostra(pu - passo, pv)) / (2 * passo), hv = (amostra(pu, pv + passo) - amostra(pu, pv - passo)) / (2 * passo), L = Math.hypot(hu, hv, 1);
+        return [o * -hu / L, o * -hv / L, o / L]; // componentes em (u, v, k)
+      };
+      const curvar = p => {
+        const t = (fundo - p[k]) * s, off = t - embute;
+        const pu = inverso(AU, AU0 + (p[u] - uc), u0), pv = inverso(AV, AV0 + (p[v] - vc), v0);
+        const h = amostra(pu, pv), N = normal(pu, pv);
+        p[u] = pu + N[0] * off; p[v] = pv + N[1] * off; p[k] = h + N[2] * off;
+      };
+      // Cada parte solta (cada letra) é tratada sozinha. Se a superfície embaixo dela é suave, ela acompanha
+      // a curva como antes. Se dobra demais ali (uma quina, como a ponta da estrela), dobrar a letra a
+      // amassava e torcia; então ela vai INTEIRA, sem deformar, deitada na face onde fica o centro dela.
+      const partes = fino.decompose();
+      const prontas = partes.map(pt => {
+        if (modo === 'suave' || partes.length === 1) return pt.warp(curvar);
+        const b = pt.boundingBox(), cu = (b.min[u] + b.max[u]) / 2, cv = (b.min[v] + b.max[v]) / 2;
+        const pu0 = inverso(AU, AU0 + (cu - uc), u0), pv0 = inverso(AV, AV0 + (cv - vc), v0), N0 = normal(pu0, pv0);
+        let desvio = 0;
+        for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) {
+          const qu = inverso(AU, AU0 + (b.min[u] + (b.max[u] - b.min[u]) * i / 4 - uc), u0), qv = inverso(AV, AV0 + (b.min[v] + (b.max[v] - b.min[v]) * j / 4 - vc), v0), N = normal(qu, qv);
+          desvio = Math.max(desvio, Math.acos(Math.max(-1, Math.min(1, N[0] * N0[0] + N[1] * N0[1] + N[2] * N0[2]))));
+        }
+        if (desvio < 20 * Math.PI / 180) return pt.warp(curvar);
+        // base no plano tangente da face: T1 segue o eixo u da peça, T2 completa (mesmo sentido de v)
+        let T1 = [1 - N0[0] * N0[0], -N0[0] * N0[1], -N0[0] * N0[2]], l1 = Math.hypot(...T1);
+        if (l1 < 1e-6) T1 = [0, 1, 0], l1 = 1;
+        T1 = T1.map(x => x / l1);
+        let T2 = [N0[1] * T1[2] - N0[2] * T1[1], N0[2] * T1[0] - N0[0] * T1[2], N0[0] * T1[1] - N0[1] * T1[0]];
+        if (T2[1] < 0) T2 = T2.map(x => -x);
+        const S0 = [pu0, pv0, amostra(pu0, pv0)];
+        // a face da letra que encosta na superfície afunda um pouco a mais nas bordas da quina, para não ficar no ar
+        const afundaExtra = Math.min(D * 0.5, Math.tan(Math.min(desvio, 60 * Math.PI / 180)) * Math.max(b.max[u] - b.min[u], b.max[v] - b.min[v]) * 0.25);
+        return pt.warp(p => {
+          const a = p[u] - cu, c = p[v] - cv, t = (fundo - p[k]) * s, off = t - embute - afundaExtra * Math.max(0, 1 - t / D);
+          const q = [0, 1, 2].map(i => S0[i] + T1[i] * a + T2[i] * c + N0[i] * off);
+          p[u] = q[0]; p[v] = q[1]; p[k] = q[2];
+        });
+      });
+      partes.forEach(pt => pt.delete());
+      res = wasm.Manifold.union(prontas); prontas.forEach(pt => pt.delete());
+      // aviso só se alguma letra ficou mesmo curvada demais (as que foram inteiras não deformam)
+    }
     fino.delete();
   } catch (e) { throw new Error(tr('Não foi possível projetar: ') + e.message); }
   if (RotInv) { const g = res.transform(RotInv.elements); res.delete(); res = g; }
@@ -2767,6 +2822,10 @@ function atualizarAfetadas(aoVivo = false) {
 }
 
 function reconstruir3d() {
+  const t0 = performance.now();
+  try { reconstruir3dAgora(); } finally { custoUltimo = performance.now() - t0; }
+}
+function reconstruir3dAgora() {
   motor.iniciarPassada();
   E.erros.clear(); E.avisos.clear();
   for (const c of cacheGeo.values()) c.usado = false;
@@ -2797,7 +2856,7 @@ function reconstruir3d() {
   }
   for (const [id, m] of malhas) if (!vistos.has(id)) { objetos3d.remove(m); malhas.delete(id); }
   for (const [k, c] of cacheGeo) if (!c.usado) { c.geo.dispose(); c.arestas.dispose(); c.fio?.dispose(); cacheGeo.delete(k); }
-  $('#tris').textContent = tt`${fmtInt(totalTri)} triângulos`;
+  $('#tris').textContent = tt`${fmtInt(totalTri)} triângulos`; trisCena = totalTri;
   E.sel = E.sel.filter(id => malhas.has(id));
   atualizarAfetadas();
   objetos3d.updateMatrixWorld(true);
@@ -3265,6 +3324,13 @@ function aplicarPassoMov() { const v = Number($('#passo-mov').value); gizmo.setT
 $('#passo-mov').value = localStorage.getItem('passoMov') ?? '1';
 $('#passo-mov').addEventListener('change', aplicarPassoMov); aplicarPassoMov();
 $('#resolucao').value = localStorage.getItem('resolucao') ?? '0.5';
+// rodapé: depois de escolher, o foco volta para a vista (as setas voltam a mover a peça, não o valor)
+for (const sel of document.querySelectorAll('#status select')) {
+  sel.addEventListener('change', () => sel.blur());
+  sel.addEventListener('keydown', e => {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Delete', 'Escape'].includes(e.key) && !e.altKey) { e.preventDefault(); sel.blur(); }
+  });
+}
 $('#resolucao').addEventListener('change', () => {
   localStorage.setItem('resolucao', $('#resolucao').value);
   motor.definirResolucao(Number($('#resolucao').value)); reconstruir3d();
@@ -3610,11 +3676,10 @@ async function salvarComo() { return janelaSalvar(); }
 const nomeBase = () => (E.caminho ? E.caminho.split(/[\\/]/).pop().replace(/\.(nvl3d|anvil)$/i, '') : 'projeto');
 // Um STL por objeto, todos nas coordenadas da mesa (origem na quina): abrindo os arquivos juntos no
 // fatiador, as peças se encaixam como no projeto (útil para multimaterial e para peças separadas).
-async function exportarStlPorObjeto() {
-  const alvo = (E.sel.length ? selecionados() : E.doc.objetos).filter(o => !o.furo);
-  if (!alvo.length) return mensagem(tr('Nada sólido para exportar.'), true);
-  const arquivos = [], usados = new Set();
-  for (const o of alvo) {
+// Malha de cada peça sólida, nas coordenadas da mesa (usado no STL por objeto e no 3MF).
+function malhasPorObjeto(alvo) {
+  const lista = [];
+  for (const o of alvo.filter(o => !o.furo)) {
     let d;
     try { const w = motor.mundo(o); d = dadosMalha(w); w.delete(); }
     catch {
@@ -3623,20 +3688,31 @@ async function exportarStlPorObjeto() {
       for (let i = 0; i < p.length; i += 3) { v.set(mm.v[i], mm.v[i + 1], mm.v[i + 2]).applyMatrix4(M); p.set([v.x, v.y, v.z], i); }
       d = { posicoes: p, indices: mm.t };
     }
-    let nome = `${nomeBase()} - ${o.nome}`.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_'), n = 2;
-    while (usados.has(nome.toLowerCase())) nome = `${nomeBase()} - ${o.nome} (${n++})`.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
-    usados.add(nome.toLowerCase());
-    arquivos.push({ nome: nome + '.stl', bytes: stlBinario(d, o.nome) });
+    lista.push({ no: o, nome: o.nome, cor: o.cor, dados: d });
   }
+  return lista;
+}
+// Um STL por objeto, todos nas coordenadas da mesa (origem na quina): abrindo os arquivos juntos no
+// fatiador, as peças se encaixam como no projeto (útil para multimaterial e para peças separadas).
+async function exportarStlPorObjeto() {
+  const alvo = E.sel.length ? selecionados() : E.doc.objetos;
+  if (!alvo.some(o => !o.furo)) return mensagem(tr('Nada sólido para exportar.'), true);
+  const arquivos = [], usados = new Set();
+  await comAviso(tr('Gerando malhas…'), () => {
+    for (const p of malhasPorObjeto(alvo)) {
+      let nome = `${nomeBase()} - ${p.nome}`.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_'), n = 2;
+      while (usados.has(nome.toLowerCase())) nome = `${nomeBase()} - ${p.nome} (${n++})`.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
+      usados.add(nome.toLowerCase());
+      arquivos.push({ nome: nome + '.stl', bytes: stlBinario(p.dados, p.nome) });
+    }
+  });
   const pasta = await anvil.exportarVarios(arquivos);
   if (pasta) mensagem(tt`${arquivos.length} arquivo(s) STL salvos em ${pasta}, todos com a mesma origem (quina da mesa): abra-os juntos no fatiador.`);
 }
 
-async function exportarStl() {
-  const alvo = E.sel.length ? selecionados() : E.doc.objetos;
-  if (!alvo.some(o => !o.furo)) return mensagem(tr('Nada sólido para exportar.'), true);
-  let m;
-  let dados, aviso = '';
+// Todas as peças fundidas num corpo só (STL e OBJ).
+function malhaFundida(alvo) {
+  let m, dados, aviso = '';
   try { m = motor.resultadoFinal(alvo); dados = dadosMalha(m); m.delete(); }
   catch (e) {
     // malha aberta não entra em união: exporta as peças lado a lado, sem fundir
@@ -3653,15 +3729,82 @@ async function exportarStl() {
     dados = { posicoes: new Float32Array(pos), indices: new Uint32Array(idx) };
     aviso = tr(' Atenção: há malha aberta, as peças foram exportadas sem fundir.');
   }
-  let minZ = Infinity;
-  for (let i = 2; i < dados.posicoes.length; i += 3) minZ = Math.min(minZ, dados.posicoes[i]);
+  return { dados, aviso };
+}
+
+// Exportar: STL ou OBJ (corpo único) ou 3MF (uma peça por objeto, com as cores), conforme o tipo escolhido.
+async function exportarStl() {
+  const alvo = E.sel.length ? selecionados() : E.doc.objetos;
+  if (!alvo.some(o => !o.furo)) return mensagem(tr('Nada sólido para exportar.'), true);
+  const escolha = await anvil.escolherExportacao(nomeBase(), localStorage.getItem('formatoExportar') ?? 'stl');
+  if (!escolha) return;
+  localStorage.setItem('formatoExportar', escolha.ext);
+  let bytes, aviso = '', minZ = Infinity;
+  await comAviso(tr('Gerando malha…'), async () => {
+    if (escolha.ext === '3mf') {
+      const pecas = malhasPorObjeto(alvo);
+      for (const p of pecas) for (let i = 2; i < p.dados.posicoes.length; i += 3) minZ = Math.min(minZ, p.dados.posicoes[i]);
+      bytes = await escrever3mf(pecas);
+    } else {
+      const r = malhaFundida(alvo); aviso = r.aviso;
+      for (let i = 2; i < r.dados.posicoes.length; i += 3) minZ = Math.min(minZ, r.dados.posicoes[i]);
+      bytes = escolha.ext === 'obj' ? escreverObj(r.dados, nomeBase()) : stlBinario(r.dados, nomeBase());
+    }
+  });
   if (Math.abs(minZ) > 0.01) aviso += tt` Atenção: a peça não está apoiada no plano (ponto mais baixo em Z = ${fmt(minZ)} mm).`;
   const ruins = alvo.filter(o => o.tipo === 'malha' && !diagDe(o).ok).map(o => o.nome);
   if (ruins.length) aviso += tt` Malha com problemas: ${ruins.join(', ')} (use Reparar para impressão).`;
-  const bytes = stlBinario(dados, nomeBase());
-  const c = await anvil.exportar(nomeBase() + '.stl', bytes, 'stl', 'STL');
+  const c = await anvil.gravarBinario(escolha.caminho, bytes);
   if (c) mensagem(tt`${E.sel.length ? tr('Seleção exportada') : tr('Exportado')}: ${c} (o projeto .nvl3d continua editável).${aviso}`, !!aviso);
 }
+
+// ---------- aviso de processamento ----------
+// O JavaScript para enquanto o motor calcula, então o aviso precisa estar na tela antes: em cenas
+// pesadas o clique/atalho é segurado por dois quadros (o aviso aparece) e depois executado.
+// O aviso só fica visível se a espera passar de ~0,2 s (animação de entrada com atraso, feita pelo
+// compositor, que continua rodando mesmo com o JavaScript ocupado).
+let trisCena = 0, custoUltimo = 0;
+const avisoOcupado = el('div', { id: 'ocupado', hidden: true }, el('div', { class: 'ocupado-caixa' }, el('span', { class: 'ocupado-roda' }), el('span', { class: 'ocupado-txt' })));
+document.body.append(avisoOcupado);
+const doisQuadros = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+function mostrarOcupado(texto) {
+  avisoOcupado.querySelector('.ocupado-txt').textContent = texto + (trisCena > 50000 ? ' ' + tt`(${fmtInt(trisCena)} triângulos)` : '');
+  avisoOcupado.hidden = false;
+}
+const esconderOcupado = () => { avisoOcupado.hidden = true; };
+async function comAviso(texto, fn) {
+  mostrarOcupado(texto);
+  await doisQuadros();
+  try { return await fn(); } finally { esconderOcupado(); }
+}
+const cenaPesada = () => trisCena > 150000 || custoUltimo > 250;
+// cliques e atalhos em cena pesada passam pelo aviso
+let reenviando = false;
+function segurar(e, refazer) {
+  if (reenviando || !cenaPesada() || !avisoOcupado.hidden) return;
+  e.stopImmediatePropagation(); e.preventDefault();
+  mostrarOcupado(tr('Processando…'));
+  doisQuadros().then(() => { reenviando = true; try { refazer(); } finally { reenviando = false; } return doisQuadros(); }).then(esconderOcupado);
+}
+window.addEventListener('click', e => {
+  const b = e.target.closest?.('button, [data-cmd]');
+  if (!b || b.closest('#ocupado') || b.matches('.menu-titulo, [data-fechar], .interrog')) return;
+  segurar(e, () => b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey })));
+}, true);
+window.addEventListener('change', e => {
+  if (!e.target.matches?.('#propriedades input, #propriedades select, #status select')) return;
+  const alvo = e.target;
+  segurar(e, () => alvo.dispatchEvent(new Event('change', { bubbles: true })));
+}, true);
+window.addEventListener('keydown', e => {
+  if (e.repeat || e.target.matches?.('input, textarea') || !modal.hidden) return;
+  const k = e.key.toLowerCase();
+  const pesado = ((e.ctrlKey || e.metaKey) && 'zyvdgkxe'.includes(k) && k.length === 1) || k === 'delete' || (k === 'h' && !e.ctrlKey && !e.metaKey) || (k === 'enter' && (MA || AL));
+  if (!pesado) return;
+  const alvo = e.target, init = { key: e.key, code: e.code, bubbles: true, cancelable: true, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey };
+  segurar(e, () => alvo.dispatchEvent(new KeyboardEvent('keydown', init)));
+}, true);
+
 anvil.aoSalvarEFechar(async () => { if (await salvar()) anvil.fecharAgora(); });
 
 // ---------- câmera ----------
@@ -4197,8 +4340,8 @@ window.addEventListener('drop', async e => {
   const arqs = [...e.dataTransfer.files]; if (!arqs.length) return;
   const ext = f => (f.name.match(/\.([^.]+)$/)?.[1] ?? '').toLowerCase(), nome = f => f.name.replace(/\.[^.]+$/, '');
   const ponto = e.target.closest?.('#vista') ? pontoDeSoltar(e) : null;
-  const stls = arqs.filter(f => ext(f) === 'stl');
-  if (stls.length) { novaPecaPreparar(); importarStls(await Promise.all(stls.map(async f => ({ nome: nome(f), bytes: new Uint8Array(await f.arrayBuffer()) }))), ponto); }
+  const stls = arqs.filter(f => ['stl', 'obj', '3mf'].includes(ext(f)));
+  if (stls.length) { novaPecaPreparar(); await importarMalhas(await Promise.all(stls.map(async f => ({ nome: nome(f), ext: ext(f), bytes: new Uint8Array(await f.arrayBuffer()) }))), ponto); }
   for (const f of arqs.filter(f => ext(f) === 'svg')) { novaPecaPreparar(); criarDeSvg(await f.text(), nome(f)); }
   const img = arqs.find(f => ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'].includes(ext(f)));
   if (img) abrirImportarImagem(img);
@@ -4324,7 +4467,7 @@ document.addEventListener('keydown', e => {
   if (!modal.hidden) { if (e.key === 'Escape') fecharModal(); return; }
   if (e.key === 'F1') { e.preventDefault(); return abrirAjuda(); }
   if (e.key === 'Escape' && !popdica.hidden) return fecharDica();
-  if (e.target.matches?.('input, textarea, select')) return;
+  if (e.target.matches?.('input, textarea, select') && !e.target.closest('#status')) return;
   const k = e.key.toLowerCase(), c = e.ctrlKey || e.metaKey;
   const atalho = (
     c && e.shiftKey && k === 's' ? salvarComo : c && k === 's' ? salvar : c && k === 'o' ? abrir : c && k === 'n' ? novo :
@@ -4346,7 +4489,16 @@ document.addEventListener('keydown', e => {
 });
 
 // acesso para depuração no console (F12) e testes
-window.__anvil = { abrirImagem: f => abrirImportarImagem(f), importarStls: (a, p) => importarStls(a, p), get previaAF() { return grupoPreviaAF.children.length; }, orbita, abrirTexto: (texto, caminho) => abrirArquivo({ texto, caminho }), motor, moverPeca: v => { moverPeca = v; atualizarVisual(); }, alcasLaterais: v => { alcasLaterais = v; desenhar(); }, criarDeSvg: (t, n) => criarDeSvg(t, n), mostrarCotas: (chave = 'todas') => { alcaHover = null; cotasAlca = chave; cotasAte = performance.now() + 60000; desenhar(); }, get espelho() { return ESP; }, arrasteAlcaInfo: () => arrasteAlca, serializarComMiniatura: () => serializarComMiniatura(), selecionar: ids => { E.sel = ids; atualizarVisual(); montarPainel(); }, gizmo, grupoAfetado, get alinharObj() { return ALN; }, get alinhar() { return AL; }, get modoMalha() { return ME; }, THREE, camera, cena, grupoArestas, malhas, estado: E, get modoAresta() { return MA; } };
+// teste: refaz a projeção de uma peça "na superfície" a partir da receita guardada nela
+const reprojetar = (i, alvo, modo = 'curva') => {
+  const o = E.doc.objetos[i], rec = o.receita[0], c = structuredClone(rec);
+  definirMatriz(c, matrizDoNo(o).multiply(matrizDoNo(rec)));
+  const ez = new V3().setFromMatrixColumn(matrizDoNo(c), 2).normalize();
+  const B = E.doc.objetos[alvo], cB = new THREE.Box3().setFromObject(malhas.get(B.id)).getCenter(new V3()), cC = new V3().setFromMatrixPosition(matrizDoNo(c));
+  const dir = cB.sub(cC).dot(ez) > 0 ? ez : ez.negate();
+  confirmarProjecao(o, calcularProjecao(c, B, dir, 180, { modo, afundar: 0.3 }), c);
+};
+window.__anvil = { reprojetar, abrirImagem: f => abrirImportarImagem(f), importarStls: (a, p) => importarStls(a, p), importarMalhas: (a, p) => importarMalhas(a, p), get previaAF() { return grupoPreviaAF.children.length; }, orbita, abrirTexto: (texto, caminho) => abrirArquivo({ texto, caminho }), motor, moverPeca: v => { moverPeca = v; atualizarVisual(); }, alcasLaterais: v => { alcasLaterais = v; desenhar(); }, criarDeSvg: (t, n) => criarDeSvg(t, n), mostrarCotas: (chave = 'todas') => { alcaHover = null; cotasAlca = chave; cotasAte = performance.now() + 60000; desenhar(); }, get espelho() { return ESP; }, arrasteAlcaInfo: () => arrasteAlca, serializarComMiniatura: () => serializarComMiniatura(), selecionar: ids => { E.sel = ids; atualizarVisual(); montarPainel(); }, gizmo, grupoAfetado, get alinharObj() { return ALN; }, get alinhar() { return AL; }, get modoMalha() { return ME; }, THREE, camera, cena, grupoArestas, malhas, estado: E, get modoAresta() { return MA; } };
 
 // ---------- idioma ----------
 const originais = new WeakMap();

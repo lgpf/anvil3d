@@ -21,6 +21,14 @@ export const decimal = (v, casas = 2) => { const s = Number(v).toFixed(casas); r
 export const inteiro = n => Math.round(n).toLocaleString(idioma === 'en' ? 'en-US' : 'pt-BR');
 
 export const EN = {
+  // ---- formatos de malha e aviso de processamento
+  'Importar malha (STL, OBJ, 3MF)…': 'Import mesh (STL, OBJ, 3MF)…', 'Exportar (STL, OBJ, 3MF)…': 'Export (STL, OBJ, 3MF)…',
+  'Exportar': 'Export', 'Exportar STL, OBJ ou 3MF (Ctrl+E)': 'Export STL, OBJ or 3MF (Ctrl+E)',
+  'Lendo malha…': 'Reading mesh…', 'Gerando malha…': 'Building mesh…', 'Gerando malhas…': 'Building meshes…', 'Processando…': 'Processing…',
+  '({0} triângulos)': '({0} triangles)', '{0} malha(s) importada(s).': '{0} mesh(es) imported.',
+  'arquivo OBJ vazio ou inválido': 'empty or invalid OBJ file', 'arquivo 3MF inválido (não é um zip)': 'invalid 3MF file (not a zip)',
+  'arquivo 3MF com compressão não suportada': '3MF file with unsupported compression', 'arquivo 3MF sem modelo 3D': '3MF file without a 3D model',
+  'arquivo 3MF sem malhas': '3MF file without meshes',
   // ---- barra, menus e barra de status
   'Arquivo': 'File', 'Editar': 'Edit', 'Objeto': 'Object', 'Vista': 'View', 'Ajuda': 'Help',
   'Novo': 'New', 'Abrir…': 'Open…', 'Salvar': 'Save', 'Salvar como…': 'Save as…', 'Importar STL…': 'Import STL…', 'Exportar STL…': 'Export STL…',

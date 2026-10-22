@@ -97,8 +97,8 @@ function montarMenuMac() {
 // textos dos diálogos do sistema (o idioma vem da janela)
 let idioma = 'pt';
 const TXT = {
-  pt: { projeto: 'Projeto Anvil3D', stl: 'Malha STL', salvar: 'Salvar', naoSalvar: 'Não salvar', cancelar: 'Cancelar', pergunta: t => `Salvar as alterações em ${t}?` },
-  en: { projeto: 'Anvil3D project', stl: 'STL mesh', salvar: 'Save', naoSalvar: "Don't save", cancelar: 'Cancel', pergunta: t => `Save changes to ${t}?` },
+  pt: { projeto: 'Projeto Anvil3D', stl: 'Malha STL', malhas: 'Malhas 3D (STL, OBJ, 3MF)', stlNome: 'STL (impressão 3D)', objNome: 'OBJ (malha)', mf3Nome: '3MF (peças com cores)', salvar: 'Salvar', naoSalvar: 'Não salvar', cancelar: 'Cancelar', pergunta: t => `Salvar as alterações em ${t}?` },
+  en: { projeto: 'Anvil3D project', stl: 'STL mesh', malhas: '3D meshes (STL, OBJ, 3MF)', stlNome: 'STL (3D printing)', objNome: 'OBJ (mesh)', mf3Nome: '3MF (parts with colors)', salvar: 'Save', naoSalvar: "Don't save", cancelar: 'Cancel', pergunta: t => `Save changes to ${t}?` },
 };
 const txt = () => TXT[idioma];
 let janela, estado = { sujo: false, titulo: 'Anvil3D' }, fecharForcado = false;
@@ -279,11 +279,25 @@ app.whenReady().then(() => {
   // importar: vários arquivos de uma vez; a pasta usada fica lembrada durante a sessão
   let pastaImportar = null;
   ipcMain.handle('arquivo:importar', async () => {
-    const r = await dialog.showOpenDialog(janela, { defaultPath: pastaImportar || undefined, filters: [{ name: txt().stl, extensions: ['stl'] }], properties: ['openFile', 'multiSelections'] });
+    const r = await dialog.showOpenDialog(janela, { defaultPath: pastaImportar || undefined, filters: [
+      { name: txt().malhas, extensions: ['stl', 'obj', '3mf'] }, { name: 'STL', extensions: ['stl'] }, { name: 'OBJ', extensions: ['obj'] }, { name: '3MF', extensions: ['3mf'] },
+    ], properties: ['openFile', 'multiSelections'] });
     if (r.canceled || !r.filePaths.length) return null;
     pastaImportar = path.dirname(r.filePaths[0]);
-    return Promise.all(r.filePaths.map(async f => ({ nome: path.basename(f).replace(/\.stl$/i, ''), bytes: await fs.promises.readFile(f) })));
+    return Promise.all(r.filePaths.map(async f => ({ nome: path.basename(f).replace(/\.(stl|obj|3mf)$/i, ''), ext: path.extname(f).slice(1).toLowerCase(), bytes: await fs.promises.readFile(f) })));
   });
+  // exportar malha: o formato sai do tipo escolhido no diálogo (o último usado vem primeiro)
+  ipcMain.handle('arquivo:escolherExportacao', async (_, sugestao, preferido) => {
+    const formatos = [
+      { name: txt().stlNome, extensions: ['stl'] }, { name: txt().objNome, extensions: ['obj'] }, { name: txt().mf3Nome, extensions: ['3mf'] },
+    ].sort((a, b) => (b.extensions[0] === preferido) - (a.extensions[0] === preferido));
+    const r = await dialog.showSaveDialog(janela, { defaultPath: path.join(pastaUsuario(), sugestao + '.' + formatos[0].extensions[0]), filters: formatos });
+    if (r.canceled || !r.filePath) return null;
+    let ext = path.extname(r.filePath).slice(1).toLowerCase(), caminho = r.filePath;
+    if (!['stl', 'obj', '3mf'].includes(ext)) { ext = formatos[0].extensions[0]; caminho += '.' + ext; }
+    return { caminho, ext };
+  });
+  ipcMain.handle('arquivo:gravarBinario', async (_, caminho, bytes) => { await fs.promises.writeFile(caminho, Buffer.from(bytes)); return caminho; });
   ipcMain.handle('arquivo:importarSvg', async () => {
     const r = await dialog.showOpenDialog(janela, { defaultPath: pastaImportar || undefined, filters: [{ name: 'SVG', extensions: ['svg'] }], properties: ['openFile'] });
     if (r.canceled) return null;

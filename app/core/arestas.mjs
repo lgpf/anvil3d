@@ -376,22 +376,37 @@ export function ferramentas(wasm, feicoes, modo, medida, segmentos, base = null)
   const prolongar = (V, saida, lados) => {
     if (!base) return 0;
     let bis = v.add(lados[0].u, lados[1].u); const lb = Math.hypot(...bis); if (lb < 1e-9) return 0; bis = v.mul(bis, 1 / lb);
-    const P = v.add(V, v.add(v.mul(saida, medida * 0.6), v.mul(bis, medida * 0.3)));
-    const t = sonda.scale(medida * 0.08).translate(P), x = t.intersect(base), dentro = x.volume() > 1e-12; t.delete(); x.delete();
-    return dentro ? 0 : medida * 3;
+    // Anda para fora pela continuação da aresta e para no primeiro ponto em que a ferramenta tocaria
+    // material de novo. Antes só um ponto perto do canto era testado e o prolongamento ia 3× a medida
+    // de uma vez: no "3" a ponta do meio ficava no vão, mas o prolongamento entrava na barra de cima
+    // e cavava um buraco na face.
+    const laterais = [v.mul(bis, medida * 0.3), v.mul(lados[0].u, medida * 0.7), v.mul(lados[1].u, medida * 0.7)];
+    const dentro = P => { const t = sonda.scale(medida * 0.08).translate(P), x = t.intersect(base), d = x.volume() > 1e-12; t.delete(); x.delete(); return d; };
+    let livre = 0;
+    for (const k of [0.6, 1.2, 1.8, 2.4, 3]) {
+      const C = v.add(V, v.mul(saida, medida * k));
+      if (laterais.some(l => dentro(v.add(C, l)))) break;
+      livre = k;
+    }
+    return livre === 0 ? 0 : medida * livre;
   };
   const cortes = [], enchimentos = [], erros = [];
+  // cada ferramenta lembra um ponto da aresta que a gerou (para saber de qual peça ela é)
+  const marcar = (m, ponto) => { m.pontoAnvil = ponto; return m; };
   // trechos retos encadeados viram uma varredura contínua; os soltos seguem pelo caminho antigo
   const retas = feicoes.filter(f => f.tipo === 'reta' && f.lados?.length === 2);
-  const soltas = [];
+  const soltas = [], pontasCadeias = [];
   for (const c of agruparCadeias(retas)) {
+    // as pontas das cadeias abertas também participam das peças de canto (ex.: onde a curva do D
+    // encontra a reta: sem isso sobrava um dente de material na quina)
+    if (c.trechos.length >= 2 && !c.fechada) pontasCadeias.push(c.trechos[0], c.trechos.at(-1));
     if (c.trechos.length < 2) { soltas.push(retas.find(f => f.a === c.trechos[0].a || f.a === c.trechos[0].b)); continue; }
     let ext = [0, 0];
     if (!c.fechada) {
       const t0 = c.trechos[0], t1 = c.trechos.at(-1);
       ext = [prolongar(t0.a, v.norm(v.sub(t0.a, t0.b)), t0.lados), prolongar(t1.b, v.norm(v.sub(t1.b, t1.a)), t1.lados)];
     }
-    try { const { solido, convexa } = varrerCadeia(wasm, c, modo, medida, segmentos, ext); (convexa ? cortes : enchimentos).push(solido); }
+    try { const { solido, convexa } = varrerCadeia(wasm, c, modo, medida, segmentos, ext); (convexa ? cortes : enchimentos).push(marcar(solido, c.trechos[0].a)); }
     catch (e) { erros.push(e.message ?? String(e)); }
   }
   feicoes = [...soltas, ...feicoes.filter(f => f.tipo !== 'reta')];
@@ -405,7 +420,7 @@ export function ferramentas(wasm, feicoes, modo, medida, segmentos, base = null)
     const sx = cs.extrude(L); cs.delete();
     const r = sx.transform([...e1, 0, ...e2, 0, ...d, 0, ...origem, 1]); sx.delete(); return r;
   };
-  const retasSel = feicoes.filter(f => f.tipo === 'reta' && f.lados?.length === 2);
+  const retasSel = [...feicoes.filter(f => f.tipo === 'reta' && f.lados?.length === 2), ...pontasCadeias];
   for (let i = 0; i < retasSel.length; i++) for (let j = i + 1; j < retasSel.length; j++) {
     const f = retasSel[i], g = retasSel[j];
     if (f.convexa !== g.convexa) continue;
@@ -415,7 +430,31 @@ export function ferramentas(wasm, feicoes, modo, medida, segmentos, base = null)
     // ângulo entre as arestas no canto (saindo do canto): em cantos agudos a peça de canto vira uma
     // lasca comprida que corta onde não devia — nesses casos é melhor não pôr peça de canto
     const sf = chP(f.a) === chP(V) ? df : v.mul(df, -1), sg = chP(g.a) === chP(V) ? dg : v.mul(dg, -1);
-    if (Math.acos(Math.max(-1, Math.min(1, v.dot(sf, sg)))) < 70 * Math.PI / 180) continue;
+    // canto "para dentro" (a face de cima faz mais de 180° ali: quinas do furo do D, ponta do furo do A,
+    // encontro da barra com as pernas): ali a peça de canto fica dentro do material e é necessária mesmo
+    // com ângulo fechado; a lasca comprida só acontece nos cantos para fora (pontas)
+    let lf = null, lg = null, parecida = 0.9;
+    for (const a of f.lados) for (const b of g.lados) { const d = v.dot(a.n, b.n); if (d > parecida) { parecida = d; lf = a; lg = b; } }
+    const paraDentro = !!lf && v.dot(lf.u, sg) < -1e-6 && v.dot(lg.u, sf) < -1e-6;
+    if (paraDentro && f.convexa) {
+      // Peça de canto girada em volta do canto: o mesmo perfil do acabamento, como se a aresta desse a volta
+      // no ponto. Ela nunca tira mais do que o acabamento ideal (cada ponto dela está a menos da medida do
+      // canto), e por isso funciona até com ângulo bem fechado (ponta do furo do A). A peça antiga, a
+      // intersecção das duas ferramentas prolongadas, nesses cantos virava uma lasca e cavava a face.
+      try {
+        const n = v.norm(lf.n);
+        let b1 = Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]; b1 = v.norm(v.sub(b1, v.mul(n, v.dot(b1, n)))); const b2 = v.cross(n, b1);
+        const mg = Math.max(EPS * 2, medida * 0.3), pts = [[0, -medida]];
+        if (modo === 'chanfro') pts.push([medida, 0]);
+        else { const k = Math.max(8, Math.ceil(segmentos(medida) / 4)); for (let i = 1; i <= k; i++) { const a = Math.PI - (Math.PI / 2) * i / k; pts.push([medida + medida * Math.cos(a), -medida + medida * Math.sin(a)]); } }
+        pts.push([medida, mg], [0, mg]);
+        const cs = new CrossSection([pts], 'Positive'), rev = cs.revolve(Math.max(16, segmentos(medida))); cs.delete();
+        const canto = rev.transform([...b1, 0, ...b2, 0, ...n, 0, ...V, 1]); rev.delete();
+        if (canto.isEmpty()) canto.delete(); else cortes.push(marcar(canto, V));
+      } catch (e) { erros.push(e.message ?? String(e)); }
+      continue;
+    }
+    if (!paraDentro && Math.acos(Math.max(-1, Math.min(1, v.dot(sf, sg)))) < 70 * Math.PI / 180) continue;
     try {
       const L = medida * 3;
       // prolongamento de cada uma para além do canto (no sentido de quem sai pelo canto)
@@ -423,7 +462,7 @@ export function ferramentas(wasm, feicoes, modo, medida, segmentos, base = null)
       const a1 = ext(f, df), b1 = ext(g, dg), c0 = a1.intersect(b1); a1.delete(); b1.delete();
       // a peça de canto fica só perto do canto (uma bola de 2× a medida)
       const bola = Manifold.sphere(medida * 2, 24).translate(V), canto = c0.intersect(bola); c0.delete(); bola.delete();
-      if (canto.isEmpty()) canto.delete(); else (f.convexa ? cortes : enchimentos).push(canto);
+      if (canto.isEmpty()) canto.delete(); else (f.convexa ? cortes : enchimentos).push(marcar(canto, V));
     } catch (e) { erros.push(e.message ?? String(e)); }
   }
   for (const f of feicoes) {
@@ -451,19 +490,51 @@ export function ferramentas(wasm, feicoes, modo, medida, segmentos, base = null)
         const s = cs.revolve(f.pontos.length); cs.delete();
         solido = s.transform([...b1, 0, ...b2, 0, ...eixo, 0, ...f.c, 1]); s.delete();
       } else continue;
-      (f.convexa ? cortes : enchimentos).push(solido);
+      (f.convexa ? cortes : enchimentos).push(marcar(solido, f.tipo === 'reta' ? f.a : f.pontos[0]));
     } catch (e) { erros.push(e.message ?? String(e)); }
   }
   sonda.delete();
   return { cortes, enchimentos, erros };
 }
 
+// Peças separadas (ex.: as letras de um texto): cada ferramenta só mexe na peça da aresta que a gerou.
+// Antes as ferramentas eram aplicadas no conjunto, e uma ferramenta prolongada (ou um canto) de uma
+// letra cortava a letra vizinha que estivesse perto.
+function aplicarPorPeca(wasm, base, cortes, enchimentos) {
+  const { Manifold } = wasm;
+  const aplicar = (alvo, cs, es) => {
+    let r = alvo.translate([0, 0, 0]);
+    if (cs.length) { const u = Manifold.union(cs); const n = r.subtract(u); r.delete(); u.delete(); r = n; }
+    if (es.length) { const u = Manifold.union(es); const n = r.add(u); r.delete(); u.delete(); r = n; }
+    return r;
+  };
+  const partes = base.decompose();
+  if (partes.length < 2) { partes.forEach(p => p.delete()); return aplicar(base, cortes, enchimentos); }
+  const caixas = partes.map(p => p.boundingBox());
+  const dono = m => {
+    const P = m.pontoAnvil; if (!P) return -1;
+    const tol = 1e-3 + 1e-4 * Math.max(...P.map(Math.abs));
+    const cand = caixas.map((b, i) => [b, i]).filter(([b]) => [0, 1, 2].every(k => P[k] >= b.min[k] - tol && P[k] <= b.max[k] + tol)).map(([, i]) => i);
+    if (cand.length <= 1) return cand[0] ?? -1;
+    const sonda = Manifold.sphere(tol * 20, 8).translate(P);
+    let melhor = -1, vm = 0;
+    for (const i of cand) { const x = sonda.intersect(partes[i]), vol = x.volume(); x.delete(); if (vol > vm) { vm = vol; melhor = i; } }
+    sonda.delete();
+    return melhor;
+  };
+  const porPeca = partes.map(() => ({ c: [], e: [] })), semDono = { c: [], e: [] };
+  for (const m of cortes) { const i = dono(m); (i >= 0 ? porPeca[i] : semDono).c.push(m); }
+  for (const m of enchimentos) { const i = dono(m); (i >= 0 ? porPeca[i] : semDono).e.push(m); }
+  const prontas = partes.map((p, i) => (porPeca[i].c.length || porPeca[i].e.length) ? aplicar(p, porPeca[i].c, porPeca[i].e) : p.translate([0, 0, 0]));
+  partes.forEach(p => p.delete());
+  let r = Manifold.union(prontas); prontas.forEach(p => p.delete());
+  if (semDono.c.length || semDono.e.length) { const n = aplicar(r, semDono.c, semDono.e); r.delete(); r = n; }
+  return r;
+}
 export function aplicarAcabamento(wasm, base, feicoes, modo, medida, segmentos) {
   const { Manifold } = wasm;
   const { cortes, enchimentos, erros } = ferramentas(wasm, feicoes, modo, medida, segmentos, base);
-  let r = base.translate([0, 0, 0]);
-  if (cortes.length) { const u = Manifold.union(cortes); const n = r.subtract(u); r.delete(); u.delete(); r = n; }
-  if (enchimentos.length) { const u = Manifold.union(enchimentos); const n = r.add(u); r.delete(); u.delete(); r = n; }
+  let r = aplicarPorPeca(wasm, base, cortes, enchimentos);
   cortes.forEach(m => m.delete()); enchimentos.forEach(m => m.delete());
   // nas junções de muitos trechos podem sobrar lascas soltas minúsculas: descarta o que ficou separado e é desprezível
   const partes = r.decompose();
