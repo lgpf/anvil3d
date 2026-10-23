@@ -1292,11 +1292,16 @@ let shiftApertado = false;
 const atualizarShift = e => { if (e.shiftKey !== shiftApertado) { shiftApertado = e.shiftKey; desenhar(); } };
 window.addEventListener('keydown', atualizarShift); window.addEventListener('keyup', atualizarShift);
 window.addEventListener('blur', () => { shiftApertado = false; });
+const matAlcaFixa = new THREE.MeshBasicMaterial({ color: 0x1e2a30, depthTest: false, transparent: true });
 const matAlcaBorda = new THREE.LineBasicMaterial({ color: 0x1e2a30, depthTest: false, transparent: true });
 const camadaCotas = el('div', { id: 'cotas' }); vista.appendChild(camadaCotas);
-const ALCAS = { 'x+': [[0, 1]], 'x-': [[0, -1]], 'y+': [[1, 1]], 'y-': [[1, -1]], 'z+': [[2, 1]],
+const ALCAS = { 'x+': [[0, 1]], 'x-': [[0, -1]], 'y+': [[1, 1]], 'y-': [[1, -1]], 'z+': [[2, 1]], 'z-': [[2, -1]], // z-: alça de baixo (estica a altura para baixo)
   'x+y+': [[0, 1], [1, 1]], 'x+y-': [[0, 1], [1, -1]], 'x-y+': [[0, -1], [1, 1]], 'x-y-': [[0, -1], [1, -1]] };
 let alcaHover = null, arrasteAlca = null;
+// alça "escolhida": a última clicada (ou arrastada). As cotas dela ficam na tela mesmo passando o mouse
+// por outras alças, ela fica preta, e uma medida digitada cresce para o lado dela. Só deixa de valer ao
+// clicar (ou arrastar) em qualquer outra coisa.
+let alcaFixa = null;
 const eixoV = i => new V3(i === 0 ? 1 : 0, i === 1 ? 1 : 0, i === 2 ? 1 : 0);
 
 // Seleção de várias peças: as alças e cotas valem para a caixa da seleção inteira (como uma peça só)
@@ -1350,10 +1355,10 @@ async function mostrarAvisoVersao(r, manual = false) {
   document.body.append(aviso);
 }
 setTimeout(() => { verificarAtualizacao(); document.querySelector('[data-cmd=checarAtualizacao]')?.classList.toggle('ativo', localStorage.getItem('checarAtualizacao') !== '0'); }, 3000);
-setTimeout(() => { document.querySelector('[data-cmd=alcasLaterais]')?.classList.toggle('ativo', alcasLaterais); document.querySelector('[data-cmd=moverPeca]')?.classList.toggle('ativo', localStorage.getItem('moverPeca') !== '0'); }, 0);
+setTimeout(() => { document.querySelector('[data-cmd=linhaCota]')?.classList.toggle('ativo', linhaCota); document.querySelector('[data-cmd=alcasLaterais]')?.classList.toggle('ativo', alcasLaterais); document.querySelector('[data-cmd=moverPeca]')?.classList.toggle('ativo', localStorage.getItem('moverPeca') !== '0'); }, 0);
 function atualizarAlcas() {
   const a = alvoAlcas();
-  if (!a) { grupoAlcas.visible = false; camadaCotas.replaceChildren(); return; }
+  if (!a) { grupoAlcas.visible = false; camadaCotas.replaceChildren(); limparLinhasCota(); return; }
   grupoAlcas.visible = true;
   a.m.updateMatrixWorld(true);
   if (!grupoAlcas.children.length) for (const k of Object.keys(ALCAS)) {
@@ -1362,42 +1367,74 @@ function atualizarAlcas() {
     h.add(borda); grupoAlcas.add(h);
   }
   for (const h of grupoAlcas.children) {
-    h.visible = alcasLaterais || h.userData.alca.length > 2 || h.userData.alca === 'z+';
+    h.visible = alcasLaterais || h.userData.alca.length > 2 || h.userData.alca === 'z+' || h.userData.alca === 'z-';
     const p = pontoLocalAlca(a.b, h.userData.alca).applyMatrix4(a.m.matrixWorld);
     h.position.copy(p);
     h.quaternion.copy(a.m.getWorldQuaternion(new THREE.Quaternion()));
     h.scale.setScalar(camera.position.distanceTo(p) * (h.userData.alca.length > 2 ? 0.014 : 0.012));
     const prop = shiftApertado && (h.userData.alca === alcaHover || arrasteAlca?.chave === h.userData.alca || (arrasteAlca?.no && arrasteAlca.prop));
-    h.material = prop ? matAlcaProp : h.userData.alca === alcaHover ? matAlcaHover : matAlca;
+    h.material = prop ? matAlcaProp : h.userData.alca === alcaFixa ? matAlcaFixa : h.userData.alca === alcaHover ? matAlcaHover : matAlca;
   }
 }
 // Cotas só aparecem quando você aponta para uma alça (ou arrasta uma), como no Tinkercad, e
 // mostram só as medidas que aquela alça muda; somem ao girar a vista. Ficam um instante na tela
 // depois que o mouse sai da alça, para dar tempo de clicar nelas e digitar.
+// Preferências › Mostrar linha da cota: uma linha preta ao longo da medida, com o valor ao lado
+let linhaCota = localStorage.getItem('linhaCota') === '1';
+const grupoLinhasCota = new THREE.Group(); cena.add(grupoLinhasCota);
+const matLinhaCota = new THREE.LineBasicMaterial({ color: 0x111111, depthTest: false, transparent: true });
+function limparLinhasCota() { for (const l of [...grupoLinhasCota.children]) { l.geometry.dispose(); grupoLinhasCota.remove(l); } }
 let cotasAlca = null, cotasAte = 0, orbitando = false, mouseNaCota = false, cotasSel = '', proximaCota = null;
-orbita.addEventListener('start', () => { orbitando = true; cotasAte = 0; cotasAlca = null; });
+// girar a vista começando em cima de uma alça: o "mouse em cima da alça" deixa de valer (durante o giro ele
+// não é atualizado e, ao soltar, as cotas daquela alça continuavam na tela com o mouse já longe dela)
+orbita.addEventListener('start', () => { orbitando = true; if (alcaHover) { alcaHover = null; renderer.domElement.style.cursor = ''; } if (!alcaFixa) { cotasAte = 0; cotasAlca = null; mouseNaCota = false; camadaCotas.replaceChildren(); limparLinhasCota(); renderer.render(cena, camera); } }); // redesenha na hora: as linhas da cota são parte da cena e ficavam na tela até a vista se mexer // girar/arrastar a vista não desfaz a alça escolhida
 // clicar em qualquer lugar da vista que não seja alça nem cota esconde as cotas
-renderer.domElement.addEventListener('pointerdown', () => { if (!alcaHover) { cotasAlca = null; cotasAte = 0; } });
+// clique esquerdo fora das alças (no fundo ou noutra peça) desfaz a alça escolhida; botão direito e do meio só giram/arrastam a vista
+renderer.domElement.addEventListener('pointerdown', e => { if (!alcaHover && e.button === 0) { cotasAlca = null; cotasAte = 0; alcaFixa = null; } });
 orbita.addEventListener('end', () => { orbitando = false; });
+// clicar fora da vista (painel, menus, lista de formas) também desfaz a alça escolhida; as cotas não contam
+document.addEventListener('pointerdown', e => {
+  if (!alcaFixa || e.target === renderer.domElement || e.target.closest?.('#cotas')) return;
+  alcaFixa = null; cotasAlca = null; cotasAte = 0; desenhar();
+}, true);
 function atualizarCotas() {
   if (arrasteAlca?.digitando) return;
   const a = alvoAlcas();
   const selAtual = E.sel.join();
-  if (cotasSel !== selAtual) { cotasSel = selAtual; cotasAlca = null; }
-  if (alcaHover || arrasteAlca?.chave) { cotasAlca = arrasteAlca?.chave ?? alcaHover; cotasAte = Infinity; }
-  const mostrar = a && !orbitando && cotasAlca && (performance.now() < cotasAte || mouseNaCota);
-  if (!mostrar) { if (!mouseNaCota) camadaCotas.replaceChildren(); return; }
+  if (cotasSel !== selAtual) { cotasSel = selAtual; cotasAlca = null; alcaFixa = null; }
+  // com uma alça escolhida, as cotas são as dela (passar por outra alça não troca); sem, seguem o mouse
+  if (arrasteAlca?.chave || alcaFixa || alcaHover) { cotasAlca = arrasteAlca?.chave ?? alcaFixa ?? alcaHover; cotasAte = Infinity; }
+  const mostrar = a && (!orbitando || alcaFixa) && cotasAlca && (performance.now() < cotasAte || (mouseNaCota && !orbitando) || alcaFixa);
+  limparLinhasCota();
+  // (girando a vista sem alça escolhida as cotas somem; antes uma cota sob o mouse ficava parada na tela)
+  if (!mostrar) { if (!mouseNaCota || orbitando) camadaCotas.replaceChildren(); return; }
   camadaCotas.replaceChildren();
   const eixosAlca = shiftApertado || cotasAlca === 'todas' ? [0, 1, 2] : ALCAS[cotasAlca].map(([i]) => i);
   const s = a.no.transformacao.escala, b = a.b, tam = [0, 1, 2].map(i => (b.max.getComponent(i) - b.min.getComponent(i)) * Math.abs(s[i]));
   const r = renderer.domElement.getBoundingClientRect(), v = vista.getBoundingClientRect();
+  // As cotas ficam nas arestas do lado da peça virado para a câmera (de qualquer lado que se olhe, girando
+  // a vista ou usando as alças de trás), para nunca ficarem escondidas atrás da peça.
+  const camL = camera.position.clone().applyMatrix4(a.m.matrixWorld.clone().invert());
+  const sx = camL.x >= (b.min.x + b.max.x) / 2 ? 1 : -1, sy = camL.y >= (b.min.y + b.max.y) / 2 ? 1 : -1;
+  const ladoX = sx > 0 ? b.max.x : b.min.x, ladoY = sy > 0 ? b.max.y : b.min.y;
   const pos = [ // onde cada cota aparece (local), um pouco para fora da peça
-    new V3((b.min.x + b.max.x) / 2, b.min.y, b.min.z), new V3(b.max.x, (b.min.y + b.max.y) / 2, b.min.z), new V3(b.max.x, b.min.y, (b.min.z + b.max.z) / 2)];
-  const fora = [new V3(0, -1, 0), new V3(1, 0, 0), new V3(1, -1, 0)];
+    new V3((b.min.x + b.max.x) / 2, ladoY, b.min.z), new V3(ladoX, (b.min.y + b.max.y) / 2, b.min.z), new V3(ladoX, ladoY, (b.min.z + b.max.z) / 2)];
+  const fora = [new V3(0, sy, 0), new V3(sx, 0, 0), new V3(sx, sy, 0)];
   pos.forEach((p, i) => {
     if (!eixosAlca.includes(i)) return;
     const w = p.clone().applyMatrix4(a.m.matrixWorld);
     const dirFora = fora[i].clone().transformDirection(a.m.matrixWorld).multiplyScalar(camera.position.distanceTo(w) * 0.06);
+    if (linhaCota) { // linha preta da medida, na aresta da caixa, afastada como a cota
+      const ini = p.clone(), fim = p.clone(); ini.setComponent(i, b.min.getComponent(i)); fim.setComponent(i, b.max.getComponent(i));
+      const A = ini.applyMatrix4(a.m.matrixWorld).add(dirFora), B = fim.applyMatrix4(a.m.matrixWorld).add(dirFora);
+      // setinhas discretas nas pontas (duas perninhas em V, viradas para a câmera)
+      const d = B.clone().sub(A), comp = d.length(); d.normalize();
+      const tamSeta = Math.min(comp * 0.25, camera.position.distanceTo(A.clone().lerp(B, 0.5)) * 0.012);
+      const lado = new V3().crossVectors(d, camera.position.clone().sub(A).normalize()).normalize().multiplyScalar(tamSeta * 0.45);
+      const pts = [A, B];
+      for (const [P, s] of [[A, 1], [B, -1]]) { const base = P.clone().addScaledVector(d, s * tamSeta); pts.push(P, base.clone().add(lado), P, base.clone().sub(lado)); }
+      const g = new THREE.BufferGeometry().setFromPoints(pts), l = new THREE.LineSegments(g, matLinhaCota); l.renderOrder = 45; grupoLinhasCota.add(l);
+    }
     const q = w.add(dirFora).project(camera);
     if (q.z > 1) return;
     const m = 34, x = Math.min(v.width - m, Math.max(m, (q.x + 1) / 2 * r.width + r.left - v.left)), y = Math.min(v.height - 16, Math.max(16, (1 - q.y) / 2 * r.height + r.top - v.top));
@@ -1425,10 +1462,14 @@ function editarCota(botao, no, eixo, atual, proporcional = false, tam = null) {
     if (seguinte !== null) requestAnimationFrame(() => { desenhar(); camadaCotas.querySelector(`[data-eixo="${seguinte}"]`)?.click(); });
     const v = lerNumero(i.value);
     if (aplicar && v > 0 && Math.abs(v - atual) > 1e-6) {
-      if (no.multi) { escalarSelecaoPara(proporcional ? { 0: tam[0] * v / atual, 1: tam[1] * v / atual, 2: tam[2] * v / atual } : { [eixo]: v }); return; }
+      // com uma alça escolhida que mexe neste eixo, a peça cresce para o lado dela (o lado oposto fica parado);
+      // sem alça escolhida, cresce igual para os dois lados, como antes
+      const lado = !proporcional && alcaFixa && ALCAS[alcaFixa]?.find(([j]) => j === eixo);
+      const chaveLado = lado ? 'xyz'[eixo] + (lado[1] > 0 ? '+' : '-') : null;
+      if (no.multi) { escalarSelecaoPara(proporcional ? { 0: tam[0] * v / atual, 1: tam[1] * v / atual, 2: tam[2] * v / atual } : { [eixo]: v }, !chaveLado, chaveLado ?? 'z+'); return; }
       const b = malhas.get(no.id).geometry.boundingBox;
       const novos = proporcional ? { 0: tam[0] * v / atual, 1: tam[1] * v / atual, 2: tam[2] * v / atual } : { [eixo]: v };
-      alterar(() => redimensionar(no, b, eixo === 2 || proporcional ? 'z+' : (eixo === 0 ? 'x+' : 'y+'), novos, eixo !== 2 || proporcional));
+      alterar(() => redimensionar(no, b, chaveLado ?? (eixo === 2 || proporcional ? 'z+' : (eixo === 0 ? 'x+' : 'y+')), novos, chaveLado ? false : (eixo !== 2 || proporcional)));
     } else desenhar();
   };
   i.addEventListener('keydown', e => { if (e.key === 'Enter') fim(true); if (e.key === 'Escape') fim(false); e.stopPropagation(); });
@@ -1484,6 +1525,7 @@ renderer.domElement.addEventListener('pointerdown', e => {
   const hit = raioDoMouse(e).intersectObjects(grupoAlcas.children.filter(h => h.visible), false)[0];
   if (!hit) return;
   const chave = hit.object.userData.alca;
+  alcaFixa = chave;
   e.stopImmediatePropagation();
   gizmo.enabled = false;
   const t = a.no.transformacao, q = new THREE.Quaternion().setFromEuler(new THREE.Euler(...t.rotacao.map(x => x * RAD), 'XYZ'));
@@ -1914,7 +1956,9 @@ function abrirModal(tituloTxt, conteudo, pequena = false) {
   modal.querySelector('[data-fechar]').focus();
 }
 function fecharModal() { modal.hidden = true; modal.querySelector('.conteudo-modal').replaceChildren(); }
-modal.addEventListener('click', e => { if (e.target === modal || e.target.closest('[data-fechar]')) fecharModal(); });
+// janelas (propriedades, salvar como, manual…) só fecham por um botão de fechar/cancelar ou pelo Esc:
+// clicar fora delas não fecha mais (era fácil perder o que estava sendo digitado)
+modal.addEventListener('click', e => { if (e.target.closest('[data-fechar]')) fecharModal(); });
 function abrirAjuda(secao = 'inicio') {
   const f = el('iframe', { src: `${idiomaAtual() === 'en' ? 'ajuda-en.html' : 'ajuda.html'}#${secao}`, title: tr('Manual') });
   if (MAC) f.addEventListener('load', () => { try { for (const k of f.contentDocument.querySelectorAll('kbd')) if (k.textContent === 'Ctrl') k.textContent = '⌘'; } catch {} });
@@ -2857,7 +2901,10 @@ function desenharAreaFuros() {
   renderer.render(cenaEscurecer, camTela);
   renderer.autoClear = ac;
 }
-function desenhar() { ajustarMesaPorBaixo(); if (typeof atualizarSetaZ === 'function') try { atualizarSetaZ(); } catch {} if (ESP && grupoEspelho.children.length) escalarSetasEspelho(); if (window.__alcasOk) { atualizarAlcas(); atualizarCotas(); } if (ALN && grupoPontosAln.children.length) escalarPontosAlinhar(); renderer.render(cena, camera); try { desenharAreaFuros(); } catch (e) { console.warn(e); } }
+// a câmera atualiza a matriz dela só na hora de desenhar a cena; as cotas (que ficam na página, por cima
+// da vista) são posicionadas antes disso e usavam a posição do quadro anterior: ao girar a vista elas
+// "pulavam" um passo atrás. Agora a matriz é atualizada primeiro.
+function desenhar() { camera.updateMatrixWorld(); ajustarMesaPorBaixo(); if (typeof atualizarSetaZ === 'function') try { atualizarSetaZ(); } catch {} if (ESP && grupoEspelho.children.length) escalarSetasEspelho(); if (window.__alcasOk) { atualizarAlcas(); atualizarCotas(); } if (ALN && grupoPontosAln.children.length) escalarPontosAlinhar(); renderer.render(cena, camera); try { desenharAreaFuros(); } catch (e) { console.warn(e); } }
 new ResizeObserver(() => {
   const { clientWidth: w, clientHeight: h } = vista;
   renderer.setSize(w, h); for (const m of Object.values(MAT)) m.resolution.set(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); desenhar();
@@ -2951,13 +2998,33 @@ function geometriaColorida(no, ent, malha) {
   const padrao = new THREE.Color((primeiroSolido(no.tipo === 'acabamento' ? no.filhos[0] : no) ?? no).cor);
   for (let i = 0; i < n; i++) cor.set([padrao.r, padrao.g, padrao.b], i * 3);
   const ri = ent.runIndex, ro = ent.runOriginalID;
+  const pintado = new Uint8Array(Math.floor(n / 3)); // triângulo já tem a cor da peça de onde veio
   if (ri && ro) for (let r = 0; r < ro.length; r++) {
     const cam = ent.caminhos?.get(ro[r]);
     let f = cam ? no : null;
     if (cam) for (const i of cam.split('/')) f = f?.filhos?.[+i];
     if (!f || f.furo) continue;
     c.set(f.cor);
-    for (let v = ri[r]; v < ri[r + 1]; v++) cor.set([c.r, c.g, c.b], v * 3);
+    for (let v = ri[r]; v < ri[r + 1]; v++) { cor.set([c.r, c.g, c.b], v * 3); pintado[Math.floor(v / 3)] = 1; }
+  }
+  // As paredes que um furo abre (o lado de dentro do furo) vêm do furo, que não tem cor: antes ficavam com
+  // a cor da primeira peça do grupo. Agora pegam a cor da peça que o furo cortou, espalhando a cor a partir
+  // da borda do furo (triângulos vizinhos que se tocam num vértice).
+  if (ri && ro && pintado.some(x => !x) && pintado.some(x => x)) {
+    const pos = ent.geo.attributes.position, chave = v => pos.getX(v).toFixed(4) + ',' + pos.getY(v).toFixed(4) + ',' + pos.getZ(v).toFixed(4);
+    const porVertice = new Map();
+    for (let v = 0; v < n; v++) { const k = chave(v); (porVertice.get(k) ?? porVertice.set(k, []).get(k)).push(Math.floor(v / 3)); }
+    const fila = [];
+    for (let t = 0; t < pintado.length; t++) if (pintado[t]) fila.push(t);
+    for (let ix = 0; ix < fila.length; ix++) {
+      const t = fila[ix];
+      for (let j = 0; j < 3; j++) for (const viz of porVertice.get(chave(t * 3 + j)) ?? []) {
+        if (pintado[viz]) continue;
+        pintado[viz] = 1;
+        for (let w = 0; w < 3; w++) for (let q = 0; q < 3; q++) cor[(viz * 3 + w) * 3 + q] = cor[t * 9 + q];
+        fila.push(viz);
+      }
+    }
   }
   g.setAttribute('color', new THREE.BufferAttribute(cor, 3));
   malha.userData.geoCor = { sig, geo: g };
@@ -4673,6 +4740,7 @@ const comandos = {
   refazer: () => { if (MA) sairModoAresta(); if (ME) sairME(); if (hist.refazer(E.doc)) { marcarSujo(); reconstruir3d(); montarPainel(); } },
   duplicar, excluir, agrupar, desagrupar, alternarFuro, copiar, colar, recortar,
   moverPeca: () => { moverPeca = !moverPeca; localStorage.setItem('moverPeca', moverPeca ? '1' : '0'); document.querySelector('[data-cmd=moverPeca]')?.classList.toggle('ativo', moverPeca); atualizarVisual(); mensagem(moverPeca ? tr('Mover arrastando a peça: ligado. Arraste a peça; a seta preta no topo sobe e desce.') : tr('Mover arrastando a peça: desligado. Use as setas do gizmo para mover.')); },
+  linhaCota: () => { linhaCota = !linhaCota; localStorage.setItem('linhaCota', linhaCota ? '1' : '0'); document.querySelector('[data-cmd=linhaCota]')?.classList.toggle('ativo', linhaCota); desenhar(); },
   alcasLaterais: () => { alcasLaterais = !alcasLaterais; localStorage.setItem('alcasLaterais', alcasLaterais ? '1' : '0'); document.querySelector('[data-cmd=alcasLaterais]')?.classList.toggle('ativo', alcasLaterais); desenhar(); },
   vistaIso: () => enquadrar('iso'), vistaTopo: () => enquadrar('topo'), vistaFrente: () => enquadrar('frente'),
   vistaDireita: () => enquadrar('direita'), ajustar: () => enquadrar(),

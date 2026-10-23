@@ -24,7 +24,7 @@ export const EN = {
   // ---- formatos de malha e aviso de processamento
   'Importar malha (STL, OBJ, 3MF)…': 'Import mesh (STL, OBJ, 3MF)…', 'Exportar (STL, OBJ, 3MF)…': 'Export (STL, OBJ, 3MF)…',
   'Exportar': 'Export', 'Exportar STL, OBJ ou 3MF (Ctrl+E)': 'Export STL, OBJ or 3MF (Ctrl+E)',
-  'Lendo malha…': 'Reading mesh…', 'Abrindo projeto…': 'Opening project…',
+  'Lendo malha…': 'Reading mesh…', 'Abrindo projeto…': 'Opening project…', 'Mostrar linha da cota': 'Show dimension line',
   'O texto passa por um canto para dentro: as letras perto do canto podem se atravessar ou ficar cortadas. Afaste o texto do canto, diminua o tamanho ou use "Projetar reto".': 'The text runs into an inside corner: letters near the corner may overlap or be cut. Move the text away from the corner, make it smaller or use "Project straight".', 'Dobrar nas arestas (faces planas)': 'Fold over edges (flat faces)',
   'A medida é grande para as partes mais finas da peça e o acabamento pode sair com defeitos nelas. Até {0} mm fica limpo.': 'The size is large for the thinnest parts of the piece and the finish may come out with defects there. Up to {0} mm it comes out clean.',
   'A medida é grande para as partes mais finas da peça e o acabamento pode sair com defeitos nelas. Experimente uma medida menor.': 'The size is large for the thinnest parts of the piece and the finish may come out with defects there. Try a smaller size.', 'Gerando malha…': 'Building mesh…', 'Gerando malhas…': 'Building meshes…', 'Processando…': 'Processing…',
