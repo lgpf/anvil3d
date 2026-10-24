@@ -19,4 +19,8 @@ mkdirSync(`${v}/fontes`, { recursive: true });
 for (const f of ['DejaVuSans.ttf', 'DejaVuSans-Bold.ttf', 'DejaVuSerif.ttf', 'DejaVuSerif-Bold.ttf', 'DejaVuSansMono.ttf', 'DejaVuSansCondensed-Bold.ttf'])
   cpSync(`node_modules/dejavu-fonts-ttf/ttf/${f}`, `${v}/fontes/${f}`);
 cpSync('node_modules/dejavu-fonts-ttf/LICENSE', `${v}/LICENSE-dejavu.txt`);
+// STEP: OpenCascade compilado para WebAssembly (só leitura), carregado na hora de importar um .step
+for (const f of ['occt-import-js.js', 'occt-import-js.wasm', 'occt-import-js-worker.js']) cpSync(`node_modules/occt-import-js/dist/${f}`, `${v}/${f}`);
+cpSync('node_modules/occt-import-js/dist/license.occt.txt', `${v}/LICENSE-occt.txt`);
+cpSync('node_modules/occt-import-js/dist/license.occt-import-js.txt', `${v}/LICENSE-occt-import-js.txt`);
 console.log('vendor ok');

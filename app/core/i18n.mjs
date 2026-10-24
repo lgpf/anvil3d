@@ -22,7 +22,7 @@ export const inteiro = n => Math.round(n).toLocaleString(idioma === 'en' ? 'en-U
 
 export const EN = {
   // ---- formatos de malha e aviso de processamento
-  'Importar malha (STL, OBJ, 3MF)…': 'Import mesh (STL, OBJ, 3MF)…', 'Exportar (STL, OBJ, 3MF)…': 'Export (STL, OBJ, 3MF)…',
+  'Importar malha (STL, OBJ, 3MF)…': 'Import mesh (STL, OBJ, 3MF)…', 'Importar peça (STL, OBJ, 3MF, STEP)…': 'Import part (STL, OBJ, 3MF, STEP)…', 'arquivo STEP inválido ou sem peças': 'invalid STEP file or no parts', 'não foi possível carregar o leitor de STEP': 'could not load the STEP reader', 'Exportar (STL, OBJ, 3MF)…': 'Export (STL, OBJ, 3MF)…',
   'Exportar': 'Export', 'Exportar STL, OBJ ou 3MF (Ctrl+E)': 'Export STL, OBJ or 3MF (Ctrl+E)',
   'Lendo malha…': 'Reading mesh…', 'Abrindo projeto…': 'Opening project…', 'Mostrar linha da cota': 'Show dimension line',
   'O texto passa por um canto para dentro: as letras perto do canto podem se atravessar ou ficar cortadas. Afaste o texto do canto, diminua o tamanho ou use "Projetar reto".': 'The text runs into an inside corner: letters near the corner may overlap or be cut. Move the text away from the corner, make it smaller or use "Project straight".', 'Dobrar nas arestas (faces planas)': 'Fold over edges (flat faces)',

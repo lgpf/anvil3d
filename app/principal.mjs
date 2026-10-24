@@ -25,7 +25,7 @@ import { avaliar } from './core/expressao.mjs';
 import { tr, tt, definirIdioma, idiomaAtual, decimal, inteiro } from './core/i18n.mjs';
 definirIdioma(localStorage.getItem('idioma') || 'pt');
 document.documentElement.lang = idiomaAtual() === 'en' ? 'en' : 'pt-BR';
-import { diagnosticar, reparar, regioesPlanas, lerMalha, gravarMalha, deManifold, bordas, apagarTriangulos, fecharBuracos, faceplana, simplificar, lerStl } from './core/malha.mjs';
+import { diagnosticar, reparar, regioesPlanas, lerMalha, gravarMalha, deManifold, bordas, apagarTriangulos, fecharBuracos, faceplana, simplificar, lerStl, soldar } from './core/malha.mjs';
 import { MeshoptSimplifier } from './vendor/meshopt_simplifier.js';
 
 const RAD = Math.PI / 180, GRAU = 180 / Math.PI;
@@ -889,14 +889,45 @@ async function importarStl() {
   if (!r) return;
   await importarMalhas(Array.isArray(r) ? r : [r]);
 }
-// Lê STL, OBJ e 3MF (um 3MF pode trazer várias peças) e manda tudo para importarStls.
+// STEP (.step/.stp): o OpenCascade (occt-import-js, WebAssembly) é carregado só na primeira vez. Cada corpo
+// do arquivo vira uma peça, já no lugar certo e com a cor dele; as curvas viram triângulos conforme a
+// "Resolução de curvas" do rodapé.
+// Roda num Worker (um processo à parte): o leitor usa recursos que a política de segurança da janela não
+// permite, e assim a tela também não trava enquanto um STEP grande é convertido.
+function lerStepNoWorker(bytes, params) {
+  return new Promise((ok, falha) => {
+    const w = new Worker('vendor/occt-import-js-worker.js');
+    w.onmessage = ev => { w.terminate(); ok(ev.data); };
+    w.onerror = ev => { w.terminate(); falha(new Error(ev.message || tr('não foi possível carregar o leitor de STEP'))); };
+    w.postMessage({ format: 'step', buffer: bytes, params });
+  });
+}
+async function lerStep(bytes) {
+  const res = Number($('#resolucao')?.value) || 0.5, ang = res >= 1.5 ? 0.4 : res >= 0.5 ? 0.2 : 0.1;
+  const r = await lerStepNoWorker(bytes, { linearUnit: 'millimeter', linearDeflectionType: 'bounding_box_ratio', linearDeflection: res >= 1.5 ? 0.003 : res >= 0.5 ? 0.001 : 0.0004, angularDeflection: ang });
+  if (!r.success) throw new Error(tr('arquivo STEP inválido ou sem peças'));
+  const hex = c => '#' + c.map(x => Math.round(Math.max(0, Math.min(1, x)) * 255).toString(16).padStart(2, '0')).join('');
+  const pecas = [];
+  for (const m of r.meshes) {
+    const pos = m.attributes.position.array, ix = m.index.array;
+    if (!ix.length) continue;
+    // desfaz os índices e solda os vértices repetidos nas bordas entre faces (cada face do STEP vem separada)
+    const solto = new Float32Array(ix.length * 3);
+    for (let i = 0; i < ix.length; i++) { const o = ix[i] * 3; solto[i * 3] = pos[o]; solto[i * 3 + 1] = pos[o + 1]; solto[i * 3 + 2] = pos[o + 2]; }
+    pecas.push({ nome: m.name, cor: m.color ? hex(m.color) : null, d: soldar({ v: solto, t: Uint32Array.from({ length: ix.length }, (_, i) => i) }) });
+  }
+  if (!pecas.length) throw new Error(tr('arquivo STEP inválido ou sem peças'));
+  return pecas;
+}
+// Lê STL, OBJ, 3MF e STEP (3MF e STEP podem trazer várias peças) e manda tudo para importarStls.
 async function importarMalhas(arquivos, pontoSoltar = null) {
   return comAviso(tr('Lendo malha…'), async () => {
     const lidos = [];
     for (const r of arquivos) {
       const ext = (r.ext ?? r.nome.match(/\.(\w+)$/)?.[1] ?? 'stl').toLowerCase(), bytes = new Uint8Array(r.bytes);
       try {
-        if (ext === '3mf') { const pecas = await ler3mf(bytes); pecas.forEach((p, i) => lidos.push({ nome: p.nome || (pecas.length > 1 ? `${r.nome} ${i + 1}` : r.nome), d: p.d })); }
+        if (ext === '3mf') { const pecas = await ler3mf(bytes); pecas.forEach((p, i) => lidos.push({ nome: p.nome || (pecas.length > 1 ? `${r.nome} ${i + 1}` : r.nome), d: p.d, conjunto: r.nome })); }
+        else if (ext === 'step' || ext === 'stp') { const pecas = await lerStep(bytes); pecas.forEach((p, i) => lidos.push({ nome: p.nome || (pecas.length > 1 ? `${r.nome} ${i + 1}` : r.nome), d: p.d, cor: p.cor, conjunto: r.nome })); }
         else if (ext === 'obj') lidos.push({ nome: r.nome, d: lerObj(bytes) });
         else lidos.push({ nome: r.nome, bytes });
       } catch (e) { lidos.push({ nome: r.nome, erro: e.message }); }
@@ -916,18 +947,26 @@ function importarStls(arquivos, pontoSoltar = null) {
     const b = new THREE.Box3().setFromBufferAttribute(new THREE.BufferAttribute(d.v, 3)), c = b.getCenter(new THREE.Vector3());
     const naMesa = arquivos.length === 1 && !pontoSoltar && b.min.x >= -0.01 && b.min.y >= -0.01 && b.max.x <= mesaX + 0.01 && b.max.y <= mesaY + 0.01 && (!mesaRedonda || [[b.min.x, b.min.y], [b.max.x, b.min.y], [b.min.x, b.max.y], [b.max.x, b.max.y]].every(([x, y]) => Math.hypot(x - mesaX / 2, y - mesaY / 2) <= mesaX / 2 + 0.01)) && b.min.z >= -0.01;
     for (let i = 0; i < d.v.length; i += 3) { d.v[i] -= c.x; d.v[i + 1] -= c.y; d.v[i + 2] -= b.min.z; }
-    const no = novaMalha(r.nome, CORES[E.corIdx++ % CORES.length]);
+    const no = novaMalha(r.nome, r.cor ?? CORES[E.corIdx++ % CORES.length]);
     gravarMalha(no, d);
-    novos.push({ no, larg: b.max.x - b.min.x, naMesa, c, zmin: b.min.z, tri: d.t.length / 3 });
+    novos.push({ no, larg: b.max.x - b.min.x, naMesa, c, zmin: b.min.z, tri: d.t.length / 3, b, conjunto: r.conjunto ?? Symbol() });
   }
   if (novos.length) {
-    // lado a lado em X, com 5 mm entre as peças, centrados no ponto de soltar (ou no centro da mesa)
-    const total = novos.reduce((s, n) => s + n.larg, 0) + 5 * (novos.length - 1);
+    // lado a lado em X, com 5 mm entre os arquivos, centrados no ponto de soltar (ou no centro da mesa). As
+    // peças de um mesmo arquivo (um 3MF ou STEP com várias peças, uma montagem) andam juntas e mantêm a
+    // posição entre elas, com a montagem apoiada na mesa.
+    const blocos = [];
+    for (const n of novos) { let bl = blocos.find(x => x.conjunto === n.conjunto); if (!bl) blocos.push(bl = { conjunto: n.conjunto, itens: [], b: new THREE.Box3() }); bl.itens.push(n); bl.b.union(n.b); }
+    const total = blocos.reduce((s, bl) => s + (bl.b.max.x - bl.b.min.x), 0) + 5 * (blocos.length - 1);
     const centro = pontoSoltar ?? posicaoNova();
     let x = centro[0] - total / 2;
-    for (const n of novos) {
-      n.no.transformacao.posicao = n.naMesa ? [arred(n.c.x), arred(n.c.y), arred(n.zmin)] : [arred(x + n.larg / 2), arred(centro[1]), 0];
-      x += n.larg + 5;
+    for (const bl of blocos) {
+      const larg = bl.b.max.x - bl.b.min.x, cb = bl.b.getCenter(new THREE.Vector3());
+      for (const n of bl.itens) {
+        n.no.transformacao.posicao = n.naMesa ? [arred(n.c.x), arred(n.c.y), arred(n.zmin)]
+          : [arred(x + larg / 2 + (n.c.x - cb.x)), arred(centro[1] + (n.c.y - cb.y)), arred(n.zmin - bl.b.min.z)];
+      }
+      x += larg + 5;
     }
     alterar(() => { for (const n of novos) E.doc.objetos.push(n.no); E.sel = novos.map(n => n.no.id); });
     enquadrar();
@@ -4630,7 +4669,7 @@ window.addEventListener('drop', async e => {
   const arqs = [...e.dataTransfer.files]; if (!arqs.length) return;
   const ext = f => (f.name.match(/\.([^.]+)$/)?.[1] ?? '').toLowerCase(), nome = f => f.name.replace(/\.[^.]+$/, '');
   const ponto = e.target.closest?.('#vista') ? pontoDeSoltar(e) : null;
-  const stls = arqs.filter(f => ['stl', 'obj', '3mf'].includes(ext(f)));
+  const stls = arqs.filter(f => ['stl', 'obj', '3mf', 'step', 'stp'].includes(ext(f)));
   if (stls.length) { novaPecaPreparar(); await importarMalhas(await Promise.all(stls.map(async f => ({ nome: nome(f), ext: ext(f), bytes: new Uint8Array(await f.arrayBuffer()) }))), ponto); }
   for (const f of arqs.filter(f => ext(f) === 'svg')) { novaPecaPreparar(); criarDeSvg(await f.text(), nome(f)); }
   const img = arqs.find(f => ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'].includes(ext(f)));

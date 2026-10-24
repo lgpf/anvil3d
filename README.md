@@ -22,10 +22,14 @@ whole construction tree; STL, OBJ and 3MF are only the export.
   extruded parts (text, SVG, polygons) the finish is computed from the outline, clean and fast, with a
   warning when the size is too large for the thin parts.
 - **3D text** with built-in and Windows fonts, wrapped around a cylinder or **applied to any face**
-  (ramps, domes, curved parts, the inside of tubes), following the surface.
+  (ramps, domes, curved parts, the inside of tubes), following the surface, or folding over the edges of
+  flat-faced parts (star, icosahedron, boxes).
 - **Import SVG** as an extruded, editable part; **import and export STL, OBJ and 3MF** (3MF keeps one
-  part per object, each with its color; STL can also be one file per object).
+  part per object, each with its color; STL can also be one file per object); **import STEP** (.step/.stp,
+  from other CAD programs), with each part of an assembly separate, in place and with its color.
 - **Join faces**, align, mirror, resize several parts at once, move by dragging (like Tinkercad).
+- **Handles and dimensions on the part**: corners, top and bottom; the clicked handle stays chosen, with its
+  dimensions always visible and a typed size growing towards it.
 - **Mesh editing**, simplification and **repair for printing**.
 - **Plugins**: create new shapes in JavaScript — or ask an AI to write them using the included guide.
 - Interface and manual in **English and Portuguese**.
@@ -55,7 +59,7 @@ Shift+click adds to the selection. The arrow keys move the part following the vi
 full manual; the **?** buttons in the panel show quick tips. On the Mac, shortcuts use ⌘ instead of Ctrl
 (⌘+click adds to the selection).
 
-**Preferences** menu: move by dragging, side handles, bed size (200–300 mm) and language.
+**Preferences** menu: move by dragging, side handles, dimension lines, bed size (200–300 mm) and language.
 
 ## Development
 
@@ -67,12 +71,12 @@ npm run dist:mac     # build the macOS app (needs a Mac; automatic on GitHub Act
 
 Structure:
 - `main.js`, `preload.js` — window, files, `app://` protocol and plugins folder.
-- `app/core/` — UI-free core (file format with migrations, Manifold geometry engine, history, STL/OBJ/3MF).
+- `app/core/` — UI-free core (file format with migrations, Manifold geometry engine, history, STL/OBJ/3MF; STEP reading through OpenCascade).
 - `app/principal.mjs` — 3D interface.
 - `plugins/` — built-in shapes, using the same API as user plugins (see `plugins/LEIA-ME.md` and
   `plugins/GENERATE-SHAPES-WITH-AI.md`).
 
-Built with Electron, three.js, Manifold, meshoptimizer and opentype.js; DejaVu fonts.
+Built with Electron, three.js, Manifold, meshoptimizer, opentype.js and occt-import-js (OpenCascade, LGPL-2.1); DejaVu fonts.
 
 ## Support the project
 

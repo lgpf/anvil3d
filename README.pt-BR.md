@@ -22,10 +22,13 @@ guarda a árvore de construção inteira; STL, OBJ e 3MF são só a exportação
   extrudadas (texto, SVG, polígonos) o acabamento é calculado pelo contorno, limpo e rápido, com aviso
   quando a medida é grande demais para as partes finas.
 - **Texto 3D** com fontes internas e do Windows, em volta de um cilindro ou **aplicado em qualquer
-  face** (rampas, cúpulas, peças curvas, o lado de dentro de tubos), acompanhando a superfície.
+  face** (rampas, cúpulas, peças curvas, o lado de dentro de tubos), acompanhando a superfície, ou dobrando nas arestas em peças de faces planas (estrela, icosaedro, caixas).
 - **Importar SVG** como peça extrudada e editável; **importar e exportar STL, OBJ e 3MF** (o 3MF guarda
-  uma peça por objeto, cada uma com a sua cor; o STL também pode sair um arquivo por objeto).
+  uma peça por objeto, cada uma com a sua cor; o STL também pode sair um arquivo por objeto); **importar STEP**
+  (.step/.stp, de outros programas de CAD), com cada peça de uma montagem separada, no lugar e com a sua cor.
 - **Juntar faces**, alinhar, espelhar, redimensionar várias peças juntas, mover arrastando (como no Tinkercad).
+- **Alças e cotas na peça**: cantos, topo e base; a alça clicada fica escolhida, com as cotas sempre à vista e a
+  medida digitada crescendo para o lado dela.
 - **Edição de malha**, simplificação e **reparo para impressão**.
 - **Plugins**: crie formas novas em JavaScript — ou peça para uma IA escrever, com o guia incluído.
 - Interface e manual em **português e inglês**.
@@ -54,7 +57,7 @@ sistemas desconfiam dele no começo:
 Shift+clique soma à seleção. As setas movem a peça seguindo a vista. **F1** abre o manual completo; os
 **?** do painel mostram dicas rápidas. No Mac, os atalhos usam ⌘ no lugar de Ctrl (⌘+clique soma à seleção).
 
-Menu **Preferências**: mover arrastando, alças laterais, tamanho da mesa (200–300 mm) e idioma.
+Menu **Preferências**: mover arrastando, alças laterais, linha da cota, tamanho da mesa (200–300 mm) e idioma.
 
 ## Desenvolver
 
@@ -66,12 +69,12 @@ Menu **Preferências**: mover arrastando, alças laterais, tamanho da mesa (200�
 
 Estrutura:
 - `main.js`, `preload.js` — janela, arquivos, protocolo `app://` e pasta de plugins.
-- `app/core/` — núcleo sem interface (formato com migrações, motor de geometria Manifold, histórico, STL/OBJ/3MF).
+- `app/core/` — núcleo sem interface (formato com migrações, motor de geometria Manifold, histórico, STL/OBJ/3MF; leitura de STEP pelo OpenCascade).
 - `app/principal.mjs` — interface 3D.
 - `plugins/` — formas internas, com a mesma API dos plugins do usuário (veja `plugins/LEIA-ME.md` e
   `plugins/GERAR-FORMAS-COM-IA.md`).
 
-Feito com Electron, three.js, Manifold, meshoptimizer e opentype.js; fontes DejaVu.
+Feito com Electron, three.js, Manifold, meshoptimizer, opentype.js e occt-import-js (OpenCascade, LGPL-2.1); fontes DejaVu.
 
 ## Apoie o projeto
 

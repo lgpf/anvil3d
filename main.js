@@ -97,8 +97,8 @@ function montarMenuMac() {
 // textos dos diálogos do sistema (o idioma vem da janela)
 let idioma = 'pt';
 const TXT = {
-  pt: { projeto: 'Projeto Anvil3D', stl: 'Malha STL', malhas: 'Malhas 3D (STL, OBJ, 3MF)', stlNome: 'STL (impressão 3D)', objNome: 'OBJ (malha)', mf3Nome: '3MF (peças com cores)', salvar: 'Salvar', naoSalvar: 'Não salvar', cancelar: 'Cancelar', pergunta: t => `Salvar as alterações em ${t}?` },
-  en: { projeto: 'Anvil3D project', stl: 'STL mesh', malhas: '3D meshes (STL, OBJ, 3MF)', stlNome: 'STL (3D printing)', objNome: 'OBJ (mesh)', mf3Nome: '3MF (parts with colors)', salvar: 'Save', naoSalvar: "Don't save", cancelar: 'Cancel', pergunta: t => `Save changes to ${t}?` },
+  pt: { projeto: 'Projeto Anvil3D', stl: 'Malha STL', malhas: 'Peças 3D (STL, OBJ, 3MF, STEP)', stlNome: 'STL (impressão 3D)', objNome: 'OBJ (malha)', mf3Nome: '3MF (peças com cores)', salvar: 'Salvar', naoSalvar: 'Não salvar', cancelar: 'Cancelar', pergunta: t => `Salvar as alterações em ${t}?` },
+  en: { projeto: 'Anvil3D project', stl: 'STL mesh', malhas: '3D parts (STL, OBJ, 3MF, STEP)', stlNome: 'STL (3D printing)', objNome: 'OBJ (mesh)', mf3Nome: '3MF (parts with colors)', salvar: 'Save', naoSalvar: "Don't save", cancelar: 'Cancel', pergunta: t => `Save changes to ${t}?` },
 };
 const txt = () => TXT[idioma];
 let janela, estado = { sujo: false, titulo: 'Anvil3D' }, fecharForcado = false;
@@ -280,11 +280,11 @@ app.whenReady().then(() => {
   let pastaImportar = null;
   ipcMain.handle('arquivo:importar', async () => {
     const r = await dialog.showOpenDialog(janela, { defaultPath: pastaImportar || undefined, filters: [
-      { name: txt().malhas, extensions: ['stl', 'obj', '3mf'] }, { name: 'STL', extensions: ['stl'] }, { name: 'OBJ', extensions: ['obj'] }, { name: '3MF', extensions: ['3mf'] },
+      { name: txt().malhas, extensions: ['stl', 'obj', '3mf', 'step', 'stp'] }, { name: 'STL', extensions: ['stl'] }, { name: 'OBJ', extensions: ['obj'] }, { name: '3MF', extensions: ['3mf'] }, { name: 'STEP', extensions: ['step', 'stp'] },
     ], properties: ['openFile', 'multiSelections'] });
     if (r.canceled || !r.filePaths.length) return null;
     pastaImportar = path.dirname(r.filePaths[0]);
-    return Promise.all(r.filePaths.map(async f => ({ nome: path.basename(f).replace(/\.(stl|obj|3mf)$/i, ''), ext: path.extname(f).slice(1).toLowerCase(), bytes: await fs.promises.readFile(f) })));
+    return Promise.all(r.filePaths.map(async f => ({ nome: path.basename(f).replace(/\.(stl|obj|3mf|step|stp)$/i, ''), ext: path.extname(f).slice(1).toLowerCase(), bytes: await fs.promises.readFile(f) })));
   });
   // exportar malha: o formato sai do tipo escolhido no diálogo (o último usado vem primeiro)
   ipcMain.handle('arquivo:escolherExportacao', async (_, sugestao, preferido) => {

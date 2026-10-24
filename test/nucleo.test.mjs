@@ -164,5 +164,14 @@ console.log('Reparo para impressão:');
   ok(acabamentoExtrudado(wasm, b, fe, meio, 'chanfro', 0.5, motor.ctx.segmentos) === null, 'só algumas arestas do topo: fica com o método aresta por aresta');
 }
 
+{
+  console.log('leitor de STEP (OpenCascade)');
+  const { createRequire } = await import('node:module'); const req = createRequire(import.meta.url);
+  const occt = await req('occt-import-js')();
+  // um cubo de 10 mm em STEP mínimo não é trivial de escrever à mão: só confere que o leitor carrega e recusa lixo
+  const r = occt.ReadStepFile(new TextEncoder().encode('não é STEP'), null);
+  ok(!r.success, 'leitor de STEP carrega e recusa um arquivo inválido');
+}
+
 console.log(falhas ? `\n${falhas} falha(s)` : '\nTudo certo.');
 process.exit(falhas ? 1 : 0);
