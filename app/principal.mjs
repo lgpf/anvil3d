@@ -237,12 +237,13 @@ gizmo.getHelper().traverse(o => { o.renderOrder = 1000; });
 // o próprio anel destacado já mostra em volta de qual eixo a peça vai girar
 for (const h of gizmo._gizmo?.helper?.rotate?.children ?? []) if (h.name === 'AXIS' && h.material) { h.material = h.material.clone(); h.material.visible = false; }
 gizmo.addEventListener('change', desenhar);
-gizmo.addEventListener('dragging-changed', e => { orbita.enabled = !e.value; });
+// girando ou movendo pelo gizmo o cursor some (a peça é que mostra onde está); volta ao soltar
+gizmo.addEventListener('dragging-changed', e => { orbita.enabled = !e.value; document.body.classList.toggle('cursor-oculto', !!e.value); });
 // segurança: se um arraste não recebeu o "soltar" (botão solto fora da janela, troca de janela com
 // Alt+Tab…), a vista ficava travada — sem zoom pela roda e sem girar. Qualquer novo clique, a roda ou
 // a janela perdendo o foco religam a órbita quando nada está sendo arrastado.
 function religarOrbita() { if (!arrasteCorpo && !arrasteAlca && !gizmo.dragging) orbita.enabled = true; }
-window.addEventListener('blur', () => { if (arrasteCorpo) { arrasteCorpo = null; cotaMov.hidden = true; limparCotasMov(); atualizarVisual(); } religarOrbita(); });
+window.addEventListener('blur', () => { soltarCursor(); document.body.classList.remove('cursor-oculto'); if (arrasteCorpo) { arrasteCorpo = null; cotaMov.hidden = true; limparCotasMov(); atualizarVisual(); } orbita.enableRotate = true; orbita.enablePan = true; religarOrbita(); });
 renderer.domElement.addEventListener('wheel', religarOrbita, { capture: true, passive: true });
 window.addEventListener('pointerdown', religarOrbita, true);
 
@@ -1600,9 +1601,18 @@ renderer.domElement.addEventListener('pointermove', e => {
     if (!d.ativo) {
       if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < 4) return;
       d.W0 = pontoNoEixo({ clientX: d.x0, clientY: d.y0 }); if (!d.W0) return;
-      d.ativo = true;
+      d.ativo = true; document.body.classList.add('cursor-oculto'); // redimensionando, o cursor some até soltar
     }
-    const W = pontoNoEixo(e); if (!W) return;
+    // botão direito junto: gira a vista com a medida parada; depois do giro (ou de um zoom com a roda) a
+    // medida continua de onde estava, sem pular
+    if (e.buttons & 2) {
+      if (d.ux !== undefined) girarVista(e.clientX - d.ux, e.clientY - d.uy);
+      d.ux = e.clientX; d.uy = e.clientY; d.reancorar = true; desenhar(); return;
+    }
+    d.ux = undefined;
+    let W = pontoNoEixo(e); if (!W) return;
+    if (d.reancorar) { d.reancorar = false; if (d.desloc) d.W0 = W.clone().sub(d.desloc); }
+    d.desloc = W.clone().sub(d.W0);
     const passo = Number($('#passo-mov').value) || 0;
     const novos = {};
     for (const [i, s] of eixos) {
@@ -1637,7 +1647,8 @@ renderer.domElement.addEventListener('pointermove', e => {
 });
 renderer.domElement.addEventListener('pointerup', e => {
   if (!arrasteAlca?.no) return;
-  const d = arrasteAlca; arrasteAlca = null; gizmo.enabled = true;
+  if (e.buttons & 1) return; // soltou só o botão direito: continua redimensionando
+  const d = arrasteAlca; arrasteAlca = null; gizmo.enabled = true; document.body.classList.remove('cursor-oculto');
   e.stopImmediatePropagation();
   if (!d.moveu) return;
   hist.registrarTexto(d.antes);
@@ -3376,7 +3387,8 @@ renderer.domElement.addEventListener('pointerdown', e => {
   }
   e.stopImmediatePropagation();
   caixaSel = null; // não começa seleção por área junto com o arraste da peça ou da seta
-  orbita.enabled = false;
+  // durante o arraste a roda continua dando zoom (o giro com o botão direito é feito à mão, abaixo)
+  orbita.enableRotate = false; orbita.enablePan = false;
   const dirCam = camera.getWorldDirection(new V3()).setZ(0); if (dirCam.lengthSq() < 1e-6) dirCam.set(0, 1, 0);
   arrasteCorpo = {
     z: modoZ, sx: e.clientX, sy: e.clientY, moveu: false, ids, p0: ponto,
@@ -3384,11 +3396,53 @@ renderer.domElement.addEventListener('pointerdown', e => {
     ini: new Map(ids.map(id => [id, malhas.get(id)?.position.clone()])), d: new V3(), jaSel: !modoZ && jaSel && E.sel.length === 1,
   };
 }, false);
+// Cursor escondido durante os arrastes (Pointer Lock): o Anvil3D passa a guardar a posição de um cursor
+// "virtual", movido pelo quanto o mouse anda. Assim, depois de girar a vista ou dar zoom com a peça na mão,
+// o cursor volta para cima da peça (o cursor de verdade não pode ser reposicionado) e o arraste continua
+// sem pular nem ficar deslocado. Ao soltar o arraste o cursor volta a aparecer.
+const CV = { ativo: false, x: 0, y: 0 };
+const cursorPreso = () => CV.ativo && document.pointerLockElement === renderer.domElement;
+function travarCursor(x, y) {
+  CV.x = x; CV.y = y; CV.ativo = true;
+  try { const p = renderer.domElement.requestPointerLock(); p?.catch?.(() => { CV.ativo = false; }); } catch { CV.ativo = false; }
+}
+function soltarCursor() { CV.ativo = false; if (document.pointerLockElement) try { document.exitPointerLock(); } catch {} }
+function posCursor(e) {
+  if (!cursorPreso()) return e;
+  const r = renderer.domElement.getBoundingClientRect();
+  CV.x = Math.min(r.right - 1, Math.max(r.left + 1, CV.x + e.movementX)); CV.y = Math.min(r.bottom - 1, Math.max(r.top + 1, CV.y + e.movementY));
+  return { clientX: CV.x, clientY: CV.y, buttons: e.buttons };
+}
+function cursorSobre(ponto) {
+  const q = ponto.clone().project(camera), r = renderer.domElement.getBoundingClientRect();
+  CV.x = r.left + (q.x + 1) / 2 * r.width; CV.y = r.top + (1 - q.y) / 2 * r.height;
+  return { clientX: CV.x, clientY: CV.y };
+}
+// quanto o mouse andou desde o último evento (com o cursor preso, as coordenadas não mudam: vale o movimento)
+const deltaMouse = (e, ux, uy) => cursorPreso() ? [e.movementX, e.movementY] : [e.clientX - ux, e.clientY - uy];
+
 window.addEventListener('pointermove', e => {
   const a = arrasteCorpo; if (!a) return;
+  // botão direito junto: gira a vista com a peça parada; depois do giro (ou de um zoom) a conta recomeça de
+  // onde a peça está, para ela não pular
+  if (e.buttons & 2) {
+    if (a.ux !== undefined || cursorPreso()) girarVista(...deltaMouse(e, a.ux, a.uy));
+    a.ux = e.clientX; a.uy = e.clientY; a.reancorar = true; atualizarSetaZ(); desenhar(); return;
+  }
+  a.ux = undefined;
   if (!a.moveu && Math.hypot(e.clientX - a.sx, e.clientY - a.sy) < 3) return;
+  if (!a.moveu) travarCursor(e.clientX, e.clientY);
   a.moveu = true;
-  const P = raioDoMouse(e).ray.intersectPlane(a.plano, new V3()); if (!P) return;
+  let ev;
+  if (a.reancorar) { // depois do giro/zoom: o cursor (virtual) volta para o ponto da peça que está sendo arrastado
+    a.reancorar = false;
+    const atual = a.p0.clone().add(a.d);
+    if (a.z) { const dc = camera.getWorldDirection(new V3()).setZ(0); if (dc.lengthSq() < 1e-6) dc.set(0, 1, 0); a.plano.setFromNormalAndCoplanarPoint(dc.normalize(), atual); }
+    ev = CV.ativo ? cursorSobre(atual) : e;
+    const Q = raioDoMouse(ev).ray.intersectPlane(a.plano, new V3());
+    if (Q) a.p0.copy(Q).sub(a.d);
+  } else ev = posCursor(e);
+  const P = raioDoMouse(ev).ray.intersectPlane(a.plano, new V3()); if (!P) return;
   const d = P.sub(a.p0); if (a.z) d.set(0, 0, d.z); else d.z = 0;
   const passo = Number($('#passo-mov').value) || 0;
   if (passo > 0) d.set(Math.round(d.x / passo) * passo, Math.round(d.y / passo) * passo, Math.round(d.z / passo) * passo);
@@ -3397,9 +3451,11 @@ window.addEventListener('pointermove', e => {
   mostrarCotaMov(a.z ? `Z ${d.z >= 0 ? '+' : ''}${fmt(d.z, 2)} mm` : `X ${d.x >= 0 ? '+' : ''}${fmt(d.x, 2)} mm   Y ${d.y >= 0 ? '+' : ''}${fmt(d.y, 2)} mm`);
   afetadasAoVivo(); atualizarSetaZ(); desenhar();
 });
-window.addEventListener('pointerup', () => {
+window.addEventListener('pointerup', e => {
   const a = arrasteCorpo; if (!a) return;
-  arrasteCorpo = null; orbita.enabled = true; cotaMov.hidden = true; limparCotasMov();
+  if (e.buttons & 1) return; // soltou só o botão direito: continua arrastando
+  soltarCursor();
+  arrasteCorpo = null; orbita.enabled = true; orbita.enableRotate = true; orbita.enablePan = true; cotaMov.hidden = true; limparCotasMov();
   if (!a.moveu || a.d.lengthSq() === 0) { if (!a.moveu && a.jaSel) comandos.alternarGizmo(); else atualizarVisual(); return; }
   alterar(() => { for (const id of a.ids) { const t = noPorId(id)?.transformacao; if (t) for (let i = 0; i < 3; i++) t.posicao[i] = arred(t.posicao[i] + a.d.getComponent(i)); } });
   mensagem(tr('Movido.'));
@@ -4693,20 +4749,79 @@ function miniaturaGerador(g) {
   }
   catch { cacheMini.set(chave, null); return null; }
 }
+// O arraste da lista de formas é feito pelo próprio Anvil3D (não pelo "arrastar e soltar" do sistema, que
+// prende o mouse e não deixa passar a roda nem o botão direito). Assim, com a forma "na mão", dá para dar
+// zoom com a roda e girar a vista segurando também o botão direito.
+let arrasteLista = null;
+// gira a vista em volta do centro dela, pelo quanto o mouse andou (igual ao botão direito sozinho)
+function girarVista(dx, dy) {
+  const h = renderer.domElement.clientHeight || 1, qUp = new THREE.Quaternion().setFromUnitVectors(camera.up, new V3(0, 1, 0));
+  const off = camera.position.clone().sub(orbita.target), sph = new THREE.Spherical().setFromVector3(off.clone().applyQuaternion(qUp));
+  sph.theta -= 2 * Math.PI * dx / h; sph.phi = Math.min(Math.PI - 0.01, Math.max(0.01, sph.phi - 2 * Math.PI * dy / h));
+  off.setFromSpherical(sph).applyQuaternion(qUp.clone().invert());
+  camera.position.copy(orbita.target).add(off); camera.lookAt(orbita.target); orbita.update();
+}
 function ladrilho(rotulo, imagem, icone, classe, titulo, acao, soltar, fantasma = null) {
-  const b = el('button', { class: 'forma ' + classe, title: titulo + '\n' + tr('Clique: põe no centro da mesa. Arraste: solta onde quiser.'), onclick: acao, draggable: 'true' },
+  const b = el('button', { class: 'forma ' + classe, title: titulo + '\n' + tr('Clique: põe no centro da mesa. Arraste: solta onde quiser (com a roda dá zoom e o botão direito gira a vista).'),
+    onclick: e => { if (arrasteLista?.soltou) { arrasteLista = null; e.preventDefault(); return; } acao(); }, draggable: 'false' },
     imagem ? el('img', { src: imagem, alt: '', draggable: 'false' }) : el('span', { class: 'icone' }, icone), el('span', { class: 'nome-forma' }, rotulo));
-  b.addEventListener('dragstart', e => {
-    arrastandoForma = soltar;
-    e.dataTransfer.setData('text/x-anvil-forma', '1'); e.dataTransfer.effectAllowed = 'copy';
-    // a própria peça segue o mouse na vista; a imagem padrão do arraste fica invisível
-    const vazio = new Image(); vazio.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-    e.dataTransfer.setDragImage(vazio, 0, 0);
-    montarFantasma(fantasma);
+  b.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    arrasteLista = { x0: e.clientX, y0: e.clientY, soltar, fantasma, ativo: false, ultimo: e };
   });
-  b.addEventListener('dragend', () => { arrastandoForma = null; marcaSoltar.visible = false; fantasmaArraste.visible = false; desenhar(); });
   return b;
 }
+function sobreAVista(e) { const r = renderer.domElement.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; }
+function atualizarFantasmaLista(e) {
+  const p = sobreAVista(e) ? pontoDeSoltar(e, true) : null;
+  const comFantasma = !!p && fantasmaArraste.userData.ok;
+  fantasmaArraste.visible = comFantasma; marcaSoltar.visible = !!p && !comFantasma;
+  if (p) {
+    fantasmaArraste.position.set(p[0], p[1], p[2]);
+    fantasmaArraste.quaternion.setFromUnitVectors(new V3(0, 0, 1), new V3(...(p.normal ?? [0, 0, 1])));
+    marcaSoltar.position.set(p[0], p[1], 0.05); marcaSoltar.scale.setScalar(Math.max(0.4, camera.position.distanceTo(marcaSoltar.position) / 180));
+  }
+  desenhar();
+}
+window.addEventListener('pointermove', e => {
+  const a = arrasteLista; if (!a || a.soltou) return;
+  if (!a.ativo) {
+    if (!(e.buttons & 1)) { arrasteLista = null; return; }
+    if (Math.hypot(e.clientX - a.x0, e.clientY - a.y0) < 5) return;
+    a.ativo = true; arrastandoForma = a.soltar; montarFantasma(a.fantasma); document.body.classList.add('arrastando-forma');
+  }
+  // botão direito junto com o esquerdo: gira a vista, e a forma fica parada onde estava enquanto isso
+  // (antes ela seguia o mouse durante o giro e saía voando pela tela)
+  if (e.buttons & 2) {
+    girarVista(...deltaMouse(e, a.ultimo.clientX, a.ultimo.clientY));
+    a.ultimo = cursorPreso() ? { clientX: CV.x, clientY: CV.y } : e; a.reancorar = true; desenhar(); return;
+  }
+  // ao entrar na vista o cursor some (fica preso a ela) e passa a valer o cursor virtual
+  if (!CV.ativo && sobreAVista(e)) travarCursor(e.clientX, e.clientY);
+  let ev;
+  if (a.reancorar && cursorPreso() && fantasmaArraste.visible) { a.reancorar = false; ev = cursorSobre(fantasmaArraste.position); } // volta para cima da forma
+  else { a.reancorar = false; ev = posCursor(e); }
+  a.ultimo = ev;
+  atualizarFantasmaLista(ev);
+}, true);
+window.addEventListener('pointerup', e => {
+  const a = arrasteLista; if (!a || a.soltou) return;
+  if (e.buttons & 1) return; // soltou só o botão direito: continua arrastando
+  if (!a.ativo) { arrasteLista = null; return; } // foi um clique: o onclick põe no centro da mesa
+  a.soltou = true; document.body.classList.remove('arrastando-forma');
+  const ev = cursorPreso() ? { clientX: CV.x, clientY: CV.y } : e; soltarCursor();
+  const f = arrastandoForma; arrastandoForma = null; marcaSoltar.visible = false; fantasmaArraste.visible = false;
+  const p = sobreAVista(ev) ? pontoDeSoltar(ev, true) : null;
+  if (p) { const q = [p[0], p[1], p.normal ? p[2] : 0]; q.normal = p.normal; f(q); }
+  desenhar();
+  setTimeout(() => { if (arrasteLista === a) arrasteLista = null; }, 0); // o click que vem depois é ignorado
+}, true);
+// Enquanto uma ação secundária acontece (zoom com a roda, giro com o botão direito), a peça fica parada onde
+// estava e a vista é quem se mexe; ela só volta a seguir o mouse quando o mouse andar de novo.
+renderer.domElement.addEventListener('wheel', () => { if (arrasteCorpo) arrasteCorpo.reancorar = true; if (arrasteLista?.ativo) arrasteLista.reancorar = true; if (arrasteAlca?.ativo) arrasteAlca.reancorar = true; }, { passive: true });
+// o menu do botão direito não aparece durante os arrastes
+window.addEventListener('contextmenu', e => { if (arrasteLista?.ativo || arrasteCorpo || arrasteAlca?.ativo) e.preventDefault(); }, true);
+window.addEventListener('keydown', e => { if (e.key === 'Escape' && arrasteLista?.ativo) { soltarCursor(); arrasteLista.soltou = true; arrastandoForma = null; marcaSoltar.visible = false; fantasmaArraste.visible = false; document.body.classList.remove('arrastando-forma'); desenhar(); } }, true);
 
 // ---------- arrastar da biblioteca para a mesa ----------
 let arrastandoForma = null;

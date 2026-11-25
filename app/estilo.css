@@ -316,3 +316,7 @@ input.cota.proporcional { outline-color: #2a7fd4; }
 #ocupado .ocupado-roda { width: 22px; height: 22px; border: 3px solid rgba(0, 0, 0, 0.12); border-top-color: #2f6f8f; border-radius: 50%; animation: ocupado-gira 0.8s linear infinite; will-change: transform; }
 @keyframes ocupado-entra { to { opacity: 1; } }
 @keyframes ocupado-gira { to { transform: rotate(360deg); } }
+
+/* arrastando uma forma da lista: cursor de "pegar" em toda a janela */
+body.arrastando-forma, body.arrastando-forma * { cursor: grabbing !important; user-select: none !important; }
+body.cursor-oculto, body.cursor-oculto * { cursor: none !important; }
