@@ -27,6 +27,8 @@ guarda a árvore de construção inteira; STL, OBJ e 3MF são só a exportação
   uma peça por objeto, cada uma com a sua cor; o STL também pode sair um arquivo por objeto); **importar STEP**
   (.step/.stp, de outros programas de CAD), com cada peça de uma montagem separada, no lugar e com a sua cor.
 - **Juntar faces**, alinhar, espelhar, redimensionar várias peças juntas, mover arrastando (como no Tinkercad).
+- **Arrastar com a vista livre**: ao arrastar uma forma da lista ou uma peça, a roda dá zoom e o botão direito gira a
+  vista; formas novas já se apoiam na face da peça embaixo do mouse.
 - **Alças e cotas na peça**: cantos, topo e base; a alça clicada fica escolhida, com as cotas sempre à vista e a
   medida digitada crescendo para o lado dela.
 - **Edição de malha**, simplificação e **reparo para impressão**.

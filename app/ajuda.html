@@ -75,7 +75,7 @@
   <h2>Primeiros passos</h2>
   <p>O Anvil3D é um CAD local no estilo do Tinkercad: você monta peças juntando formas sólidas e formas de furo. A diferença principal é que o projeto (<code>.nvl3d</code>) guarda a <b>receita completa</b> da peça. Você pode reabrir, desagrupar e mudar qualquer medida anos depois. O STL é só uma exportação.</p>
   <ol>
-    <li>Clique numa forma da lista à esquerda (por exemplo, <b>Caixa</b>): ela aparece no centro da mesa. Ou clique, segure e <b>arraste</b> a forma até a vista: a própria peça segue o mouse, translúcida, sobre a mesa, e fica onde você soltar, apoiada em Z = 0 (respeitando o passo de movimento).</li>
+    <li>Clique numa forma da lista à esquerda (por exemplo, <b>Caixa</b>): ela aparece no centro da mesa. Ou clique, segure e <b>arraste</b> a forma até a vista: a própria peça segue o mouse, translúcida, sobre a mesa, e fica onde você soltar, apoiada em Z = 0 (respeitando o passo de movimento). Passando sobre outra peça, a forma já <b>se apoia na face</b> que está embaixo do mouse, virada para fora dela (sem criar vínculo). Durante o arraste, a <b>roda</b> dá zoom e o <b>botão direito</b> gira a vista: a peça fica parada enquanto a vista se move e volta a seguir o mouse depois. <kbd>Esc</kbd> cancela.</li>
     <li>Ajuste medidas no painel da direita, em <b>Parâmetros</b>.</li>
     <li>Arraste pelas setas coloridas para mover.</li>
     <li>Transforme outra forma em <b>Furo</b>, selecione as duas e clique em <b>Agrupar</b>: o furo é subtraído.</li>
@@ -145,7 +145,7 @@
   <h2>Mover e posicionar</h2>
   <p>Enquanto você arrasta pelo gizmo, aparecem <b>cotas de deslocamento</b>: linhas de cota a partir da posição de partida (marcada com uma cruz), só nos eixos em que a peça andou, com o valor de cada uma (X vermelho, Y verde, Z azul).</p>
   <p>Arraste pelas setas do gizmo (vermelha X, verde Y, azul Z) ou pelos quadradinhos para mover em dois eixos. O movimento respeita o <b>Passo de movimento</b> da barra de status. Com vários objetos selecionados, todos andam juntos.</p>
-  <p>Pelo teclado: as setas seguem a vista (→ vai para a direita da tela, ↑ para longe), sempre no eixo X ou Y da mesa mais próximo dessa direção; <kbd>Ctrl</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> movem em Z, sempre um passo por vez.</p>
+  <p>Pelo teclado: as setas seguem a vista (→ vai para a direita da tela, ↑ para longe), sempre no eixo X ou Y da mesa mais próximo dessa direção; <kbd>Ctrl</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> movem em Z, sempre um passo por vez. Segurando a seta, a peça anda contínua e cada vez mais rápido; ao soltar, o movimento todo vira <b>um único</b> <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</p>
   <p>Em <b>Posição da origem</b> você digita as coordenadas exatas. A origem de uma forma é o centro da base. A de um grupo é o centro da base da caixa que envolvia as peças quando o grupo foi criado.</p>
   <p><b>Pousar no plano</b> desce ou sobe o objeto até que o ponto mais baixo fique em Z = 0.</p>
 </section>
@@ -156,6 +156,7 @@
   <p><b>Alça escolhida:</b> clicando numa alça, ela fica <b>preta</b> e as cotas dela ficam <b>sempre na tela</b> — passando o mouse por outras alças, girando a vista ou redimensionando. Uma medida digitada na cota faz a peça <b>crescer para o lado dessa alça</b> (o lado oposto fica parado); sem alça escolhida, cresce igual para os dois lados (e a altura, para cima). Com <kbd>Shift</kbd>, a medida muda as três na mesma proporção, mantendo o centro. A alça deixa de ser a escolhida ao clicar em outra alça, em outra peça, no fundo, no painel ou nos menus; girar a vista não desfaz a escolha. Em <b>Preferências › Mostrar linha da cota</b>, cada cota ganha uma linha preta com setinhas nas pontas, ao longo da medida.</p>
   <ul>
     <li>Alças no meio das arestas de baixo mudam só aquela medida (X ou Y); as dos cantos mudam X e Y juntas; a de cima muda a altura. Com <kbd>Shift</kbd> apertado, qualquer alça muda as <b>três medidas na mesma proporção</b> e fica <b>azul</b> para deixar isso claro.</li>
+    <li>Só um clique na alça não muda a medida: o redimensionamento começa depois que o mouse anda alguns pixels. Durante o arraste, a roda dá zoom e o botão direito gira a vista.</li>
     <li>O lado oposto à alça fica parado; a medida respeita o passo de movimento e aparece na barra de status enquanto você arrasta.</li>
     <li>Clique numa cota para digitar a medida exata (aceita contas como <code>45/2</code>); <kbd>Enter</kbd> aplica, <kbd>Esc</kbd> cancela. Com <kbd>Shift</kbd> as cotas ficam azuis: clicando numa delas assim, a medida digitada muda as três na mesma proporção.</li>
   </ul>
@@ -200,8 +201,9 @@
 <section id="grupo">
   <h2>Agrupar e desagrupar</h2>
   <p>Selecione dois ou mais objetos e use <b>Agrupar</b> (<kbd>Ctrl</kbd>+<kbd>G</kbd>): os sólidos se unem e os furos são subtraídos. Um grupo pode ser sólido ou furo e pode entrar em outro grupo.</p>
-  <p><b>Desagrupar</b> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd>) devolve as peças originais, com suas posições e parâmetros. É o que faz o Anvil3D diferente de trabalhar só com STL.</p>
-  <p>O grupo é <b>multicolorido</b>: cada parte mantém a cor da peça de onde veio, e as paredes abertas por um furo ficam com a cor da peça que o furo cortou. Escolher uma cor para o grupo pinta tudo de uma cor só; a caixa <b>Multicolorido</b> volta às cores das peças.</p>
+  <p><b>Desagrupar</b> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd>) devolve as peças originais, com suas posições e parâmetros. É o que faz o Anvil3D diferente de trabalhar só com STL. Se o grupo tem fillet ou chanfro por cima, <b>Desagrupar</b> retira o acabamento e devolve as peças (<kbd>Ctrl</kbd>+<kbd>Z</kbd> desfaz).</p>
+  <p>Agrupar só <b>furos</b> gera um grupo que continua sendo <b>furo</b>.</p>
+  <p>Marcando a caixa <b>Multicolorido</b> (desligada nos grupos novos), o grupo fica multicolorido: cada parte mantém a cor da peça de onde veio, e as paredes abertas por um furo ficam com a cor da peça que o furo cortou. Furos, fillets e chanfros dentro do grupo ficam com uma cor só, a da peça cortada. Escolher uma cor para o grupo pinta tudo de uma cor só.</p>
   <h3>Opacidade</h3>
   <p>Todo objeto sólido tem a barra <b>Opacidade</b> no painel, para deixá-lo transparente na cor escolhida e enxergar o que está dentro ou atrás. É só visual: não muda o STL.</p>
 </section>
@@ -225,7 +227,7 @@
   <h2>Preferências</h2>
   <p>O menu <b>Preferências</b> guarda escolhas que valem para todos os projetos:</p>
   <ul>
-    <li><b>Mover arrastando a peça</b> (ligado por padrão): como no Tinkercad, basta <b>arrastar a peça</b> com o botão esquerdo para deslizá-la sobre o plano em que ela está (X e Y), e a <b>seta preta no topo</b> sobe e desce (Z). O passo de movimento da barra de baixo vale para os dois. Arrastar uma peça que não está selecionada já a seleciona e move. Com essa opção ligada, o gizmo de setas coloridas não aparece. <b>Desligada</b>, a peça só se move pelo gizmo.</li>
+    <li><b>Mover arrastando a peça</b> (ligado por padrão): como no Tinkercad, basta <b>arrastar a peça</b> com o botão esquerdo para deslizá-la sobre o plano em que ela está (X e Y), e a <b>seta preta no topo</b> sobe e desce (Z). O passo de movimento da barra de baixo vale para os dois. Arrastar uma peça que não está selecionada já a seleciona e move. Enquanto arrasta, a <b>roda</b> dá zoom e o <b>botão direito</b> gira a vista: a peça fica parada onde está e, ao soltar o botão direito, volta a seguir o mouse. Durante o arraste (e também ao redimensionar pelas alças e ao girar) o <b>cursor fica escondido</b> e reaparece sobre a peça ao soltar. Com essa opção ligada, o gizmo de setas coloridas não aparece. <b>Desligada</b>, a peça só se move pelo gizmo.</li>
     <li><b>Alças nos meios das laterais</b>: mostra também as alças de redimensionar no meio de cada lado (por padrão, só os cantos, o topo e a base).</li>
     <li><b>Mostrar linha da cota</b>: desenha uma linha preta com setinhas ao longo de cada cota (desligado por padrão).</li>
     <li><b>Avisar quando houver versão nova</b> (ligado): ao abrir, no máximo uma vez por dia, o Anvil3D consulta a última versão publicada no GitHub e mostra um aviso no canto, com o link para baixar. Nenhum dado seu é enviado. <b>Ajuda › Procurar versão nova</b> consulta na hora.</li>

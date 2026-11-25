@@ -75,7 +75,7 @@
   <h2>Getting started</h2>
   <p>Anvil3D is a local CAD in the style of Tinkercad: you build parts by combining solid shapes and hole shapes. The main difference is that the project (<code>.nvl3d</code>) keeps the part's <b>full recipe</b>. You can reopen it, ungroup and change any size years later. The STL is just an export.</p>
   <ol>
-    <li>Click a shape in the list on the left (for example, <b>Box</b>): it appears in the middle of the bed. Or click, hold and <b>drag</b> the shape into the view: the part itself follows the mouse, translucent, over the bed, and stays where you drop it, resting at Z = 0 (following the move step).</li>
+    <li>Click a shape in the list on the left (for example, <b>Box</b>): it appears in the middle of the bed. Or click, hold and <b>drag</b> the shape into the view: the part itself follows the mouse, translucent, over the bed, and stays where you drop it, resting at Z = 0 (following the move step). Passing over another part, the shape already <b>rests on the face</b> under the mouse, facing out of it (no joint is created). While dragging, the <b>wheel</b> zooms and the <b>right button</b> orbits the view: the part holds still while the view moves and follows the mouse again afterwards. <kbd>Esc</kbd> cancels.</li>
     <li>Adjust its sizes in the right panel, under <b>Parameters</b>.</li>
     <li>Drag the colored arrows to move it.</li>
     <li>Turn another shape into a <b>Hole</b>, select both and click <b>Group</b>: the hole is subtracted.</li>
@@ -146,7 +146,7 @@
   <h2>Moving and positioning</h2>
   <p>Drag the gizmo arrows (red X, green Y, blue Z) or the small squares to move along two axes. Movement follows the <b>Move step</b> in the status bar. With several objects selected, they all move together.</p>
   <p>While you drag the gizmo, <b>displacement dimensions</b> appear: dimension lines from the starting position (marked with a cross), only on the axes the part moved along, with each value (X red, Y green, Z blue).</p>
-  <p>With the keyboard: the arrows follow the view (→ goes to the right of the screen, ↑ away from you), always along the bed X or Y axis closest to that direction; <kbd>Ctrl</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> move in Z, one step at a time.</p>
+  <p>With the keyboard: the arrows follow the view (→ goes to the right of the screen, ↑ away from you), always along the bed X or Y axis closest to that direction; <kbd>Ctrl</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> move in Z, one step at a time. Holding an arrow, the part moves continuously and faster and faster; on release, the whole move becomes <b>a single</b> <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</p>
   <p>In <b>Origin position</b> you type the exact coordinates. A shape's origin is the center of its base. A group's origin is the base center of the box that enclosed the parts when the group was created.</p>
   <p><b>Drop to bed</b> lowers or raises the object until its lowest point is at Z = 0.</p>
 </section>
@@ -157,6 +157,7 @@
   <p><b>Chosen handle:</b> clicking a handle turns it <b>black</b> and keeps its dimensions <b>always on screen</b> — while hovering other handles, rotating the view or resizing. A size typed into the dimension makes the part <b>grow towards that handle</b> (the opposite side stays put); with no chosen handle it grows equally on both sides (and the height, upwards). With <kbd>Shift</kbd>, the size changes all three in proportion, keeping the center. The handle stops being chosen when you click another handle, another part, the background, the panel or the menus; rotating the view does not undo the choice. In <b>Preferences › Show dimension line</b>, each dimension gets a black line with small arrows at the ends, along the measurement.</p>
   <ul>
     <li>Handles in the middle of the bottom edges change only that size (X or Y); the corner handles change X and Y together; the top handle changes the height. With <kbd>Shift</kbd> held, any handle changes <b>all three sizes in the same proportion</b> and turns <b>blue</b> to make that clear.</li>
+    <li>A plain click on a handle does not change the size: resizing starts after the mouse moves a few pixels. While dragging, the wheel zooms and the right button orbits the view.</li>
     <li>The side opposite the handle stays put; the size follows the move step and appears in the status bar while you drag.</li>
     <li>Click a dimension to type the exact size (math like <code>45/2</code> works); <kbd>Enter</kbd> applies, <kbd>Esc</kbd> cancels. With <kbd>Shift</kbd> the dimensions turn blue: clicking one that way, the typed size changes all three in the same proportion.</li>
   </ul>
@@ -202,7 +203,8 @@
   <h2>Group and ungroup</h2>
   <p>Select two or more objects and use <b>Group</b> (<kbd>Ctrl</kbd>+<kbd>G</kbd>): solids are joined and holes are subtracted. A group can be a solid or a hole and can go inside another group.</p>
   <p><b>Ungroup</b> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd>) gives back the original parts, with their positions and parameters. That is what makes Anvil3D different from working with STL only.</p>
-  <p>A group is <b>multicolor</b>: each part keeps the color of the shape it came from, and the walls opened by a hole take the color of the part the hole cut. Choosing a color for the group paints it all one color; the <b>Multicolor</b> checkbox goes back to the parts' colors.</p>
+  <p>With the <b>Multicolor</b> checkbox on (off for new groups), the group is multicolor: each part keeps the color of the shape it came from, and the walls opened by a hole take the color of the part the hole cut. Holes, fillets and chamfers inside the group take a single color, that of the part they cut. Choosing a color for the group paints it all one color.</p>
+  <p>Grouping only <b>holes</b> makes a group that stays a <b>hole</b>. If a group has a fillet or chamfer on top, <b>Ungroup</b> removes the finish and gives the parts back (<kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes it).</p>
   <h3>Opacity</h3>
   <p>Every solid object has an <b>Opacity</b> slider in the panel to make it transparent in its chosen color and see what is inside or behind it. It is only visual: it does not change the STL.</p>
 </section>
@@ -226,7 +228,7 @@
   <h2>Preferences</h2>
   <p>The <b>Preferences</b> menu keeps choices that apply to every project:</p>
   <ul>
-    <li><b>Move by dragging the part</b> (on by default): like in Tinkercad, just <b>drag the part</b> with the left button to slide it over the plane it sits on (X and Y), and the <b>black arrow on top</b> moves it up and down (Z). The move step in the bottom bar applies to both. Dragging a part that is not selected selects and moves it. With this option on, the colored arrow gizmo does not appear. <b>Off</b>, the part only moves with the gizmo.</li>
+    <li><b>Move by dragging the part</b> (on by default): like in Tinkercad, just <b>drag the part</b> with the left button to slide it over the plane it sits on (X and Y), and the <b>black arrow on top</b> moves it up and down (Z). The move step in the bottom bar applies to both. Dragging a part that is not selected selects and moves it. While dragging, the <b>wheel</b> zooms and the <b>right button</b> orbits the view: the part stays put and, when you release the right button, follows the mouse again. During the drag (and also when resizing with handles and rotating) the <b>cursor is hidden</b> and reappears over the part when you let go. With this option on, the colored arrow gizmo does not appear. <b>Off</b>, the part only moves with the gizmo.</li>
     <li><b>Handles on the middle of the sides</b>: also shows resize handles in the middle of each side (by default, only corners, top and bottom).</li>
     <li><b>Show dimension line</b>: draws a black line with small arrows along each dimension (off by default).</li>
     <li><b>Notify me of new versions</b> (on): when opening, at most once a day, Anvil3D checks the latest version published on GitHub and shows a notice in the corner with the download link. None of your data is sent. <b>Help › Check for a new version</b> checks right away.</li>

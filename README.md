@@ -28,6 +28,8 @@ whole construction tree; STL, OBJ and 3MF are only the export.
   part per object, each with its color; STL can also be one file per object); **import STEP** (.step/.stp,
   from other CAD programs), with each part of an assembly separate, in place and with its color.
 - **Join faces**, align, mirror, resize several parts at once, move by dragging (like Tinkercad).
+- **Drag with a free view**: while dragging a shape from the list or a part, the wheel zooms and the right button
+  orbits the view; new shapes already rest on the face of the part under the mouse.
 - **Handles and dimensions on the part**: corners, top and bottom; the clicked handle stays chosen, with its
   dimensions always visible and a typed size growing towards it.
 - **Mesh editing**, simplification and **repair for printing**.
