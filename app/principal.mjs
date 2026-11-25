@@ -4774,6 +4774,7 @@ function ladrilho(rotulo, imagem, icone, classe, titulo, acao, soltar, fantasma 
 function sobreAVista(e) { const r = renderer.domElement.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; }
 function atualizarFantasmaLista(e) {
   const p = sobreAVista(e) ? pontoDeSoltar(e, true) : null;
+  if (!p) faceAcesa.visible = false;
   const comFantasma = !!p && fantasmaArraste.userData.ok;
   fantasmaArraste.visible = comFantasma; marcaSoltar.visible = !!p && !comFantasma;
   if (p) {
@@ -4810,7 +4811,7 @@ window.addEventListener('pointerup', e => {
   if (!a.ativo) { arrasteLista = null; return; } // foi um clique: o onclick põe no centro da mesa
   a.soltou = true; document.body.classList.remove('arrastando-forma');
   const ev = cursorPreso() ? { clientX: CV.x, clientY: CV.y } : e; soltarCursor();
-  const f = arrastandoForma; arrastandoForma = null; marcaSoltar.visible = false; fantasmaArraste.visible = false;
+  const f = arrastandoForma; arrastandoForma = null; marcaSoltar.visible = false; fantasmaArraste.visible = false; faceAcesa.visible = false; faceAcesaChave = null;
   const p = sobreAVista(ev) ? pontoDeSoltar(ev, true) : null;
   if (p) { const q = [p[0], p[1], p.normal ? p[2] : 0]; q.normal = p.normal; f(q); }
   desenhar();
@@ -4821,7 +4822,7 @@ window.addEventListener('pointerup', e => {
 renderer.domElement.addEventListener('wheel', () => { if (arrasteCorpo) arrasteCorpo.reancorar = true; if (arrasteLista?.ativo) arrasteLista.reancorar = true; if (arrasteAlca?.ativo) arrasteAlca.reancorar = true; }, { passive: true });
 // o menu do botão direito não aparece durante os arrastes
 window.addEventListener('contextmenu', e => { if (arrasteLista?.ativo || arrasteCorpo || arrasteAlca?.ativo) e.preventDefault(); }, true);
-window.addEventListener('keydown', e => { if (e.key === 'Escape' && arrasteLista?.ativo) { soltarCursor(); arrasteLista.soltou = true; arrastandoForma = null; marcaSoltar.visible = false; fantasmaArraste.visible = false; document.body.classList.remove('arrastando-forma'); desenhar(); } }, true);
+window.addEventListener('keydown', e => { if (e.key === 'Escape' && arrasteLista?.ativo) { soltarCursor(); arrasteLista.soltou = true; arrastandoForma = null; marcaSoltar.visible = false; fantasmaArraste.visible = false; faceAcesa.visible = false; faceAcesaChave = null; document.body.classList.remove('arrastando-forma'); desenhar(); } }, true);
 
 // ---------- arrastar da biblioteca para a mesa ----------
 let arrastandoForma = null;
@@ -4842,6 +4843,60 @@ function montarFantasma(f) {
     fantasmaArraste.geometry = g; fantasmaArraste.material.color.set(cor || '#3a86c8'); fantasmaArraste.userData.ok = true;
   } catch {}
 }
+// ---------- face acesa: mostra em qual face da peça de baixo a forma nova vai se apoiar ----------
+// (com o cursor escondido durante o arraste, é o que deixa claro onde ela vai ficar)
+const faceAcesa = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0xffc400, transparent: true, opacity: 0.55,
+  depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+faceAcesa.visible = false; faceAcesa.renderOrder = 56; /* depois da forma translúcida: aparece através dela */ faceAcesa.matrixAutoUpdate = false; cena.add(faceAcesa);
+let faceAcesaChave = null;
+// vizinhos de cada triângulo (por aresta), calculados uma vez por geometria
+function vizinhosTri(geo) {
+  if (geo.userData.vizinhos) return geo.userData.vizinhos;
+  const p = geo.attributes.position.array, nt = p.length / 9, q = i => `${Math.round(p[i] * 1e4)},${Math.round(p[i + 1] * 1e4)},${Math.round(p[i + 2] * 1e4)}`;
+  const arestas = new Map(), viz = Array.from({ length: nt }, () => []);
+  for (let t = 0; t < nt; t++) {
+    const k = [q(t * 9), q(t * 9 + 3), q(t * 9 + 6)];
+    for (let j = 0; j < 3; j++) {
+      const a = k[j], b = k[(j + 1) % 3], c = a < b ? a + '|' + b : b + '|' + a;
+      const o = arestas.get(c); if (o === undefined) arestas.set(c, t); else { viz[t].push(o); viz[o].push(t); }
+    }
+  }
+  return (geo.userData.vizinhos = viz);
+}
+function normalTri(p, t, out) {
+  const i = t * 9, ax = p[i + 3] - p[i], ay = p[i + 4] - p[i + 1], az = p[i + 5] - p[i + 2], bx = p[i + 6] - p[i], by = p[i + 7] - p[i + 1], bz = p[i + 8] - p[i + 2];
+  return out.set(ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx).normalize();
+}
+// Acende a face plana (triângulos ligados com a mesma normal); em superfície curva, a região em volta
+// cuja normal fica a poucos graus da do ponto, para dar a ideia do trecho em que a forma vai encostar.
+function acenderFace(hit) {
+  if (!hit?.face || hit.faceIndex == null) { if (faceAcesa.visible) { faceAcesa.visible = false; faceAcesaChave = null; } return; }
+  const geo = hit.object.geometry, chave = geo.uuid + ':' + hit.faceIndex;
+  faceAcesa.matrix.copy(hit.object.matrixWorld); faceAcesa.matrixWorldNeedsUpdate = true; faceAcesa.visible = true;
+  // cor que contrasta com a peça de baixo: ciano sobre peças quentes (vermelho, laranja, amarelo), amarelo sobre as outras
+  const cm = (Array.isArray(hit.object.material) ? hit.object.material[0] : hit.object.material)?.color, hsl = { h: 0, s: 0, l: 0 };
+  cm?.getHSL(hsl);
+  faceAcesa.material.color.set(hsl.s > 0.25 && (hsl.h < 0.2 || hsl.h > 0.92) ? 0x00e5ff : 0xffd400);
+  if (chave === faceAcesaChave) return;
+  faceAcesaChave = chave;
+  const p = geo.attributes.position.array, viz = vizinhosTri(geo), n0 = normalTri(p, hit.faceIndex, new V3()), n = new V3();
+  const regiao = lim => {
+    const visto = new Set([hit.faceIndex]), fila = [hit.faceIndex], tris = [];
+    while (fila.length && tris.length < 20000) {
+      const t = fila.pop(); tris.push(t);
+      for (const v of viz[t]) if (!visto.has(v)) { visto.add(v); if (normalTri(p, v, n).dot(n0) > lim) fila.push(v); }
+    }
+    return tris;
+  };
+  // face plana de verdade; se for só um ou dois triângulos (superfície curva), um trecho maior em volta (até ~37°),
+  // para aparecer além da base da forma que está por cima
+  let tris = regiao(0.9995);
+  if (tris.length < 3) tris = regiao(0.8);
+  const out = new Float32Array(tris.length * 9);
+  tris.forEach((t, k) => out.set(p.subarray(t * 9, t * 9 + 9), k * 9));
+  faceAcesa.geometry.dispose(); faceAcesa.geometry = new THREE.BufferGeometry();
+  faceAcesa.geometry.setAttribute('position', new THREE.BufferAttribute(out, 3));
+}
 function pontoDeSoltar(e, naFace = false) {
   const r = renderer.domElement.getBoundingClientRect();
   ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
@@ -4849,6 +4904,7 @@ function pontoDeSoltar(e, naFace = false) {
   // (como o Juntar faces, mas sem criar vínculo): base encostada na face, de pé na direção da face.
   if (naFace) {
     const hit = ray.intersectObjects([...malhas.values()].filter(m => m.visible), false)[0];
+    if (arrastandoForma) acenderFace(hit);
     if (hit?.face) {
       const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
       const pf = [arred(hit.point.x), arred(hit.point.y), arred(hit.point.z)]; pf.normal = [n.x, n.y, n.z];
@@ -4875,7 +4931,7 @@ vista.addEventListener('dragover', e => {
   }
   desenhar();
 });
-vista.addEventListener('dragleave', () => { marcaSoltar.visible = false; fantasmaArraste.visible = false; desenhar(); });
+vista.addEventListener('dragleave', () => { marcaSoltar.visible = false; fantasmaArraste.visible = false; faceAcesa.visible = false; faceAcesaChave = null; desenhar(); });
 // Arquivos arrastados do Windows: sem isto o Electron "navegava" para o arquivo e trocava a janela inteira
 const temArquivos = e => [...(e.dataTransfer?.types ?? [])].includes('Files');
 window.addEventListener('dragover', e => { if (temArquivos(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
@@ -4898,7 +4954,7 @@ vista.addEventListener('drop', e => {
   if (!arrastandoForma) return;
   e.preventDefault();
   const p = pontoDeSoltar(e, true), f = arrastandoForma;
-  arrastandoForma = null; marcaSoltar.visible = false; fantasmaArraste.visible = false;
+  arrastandoForma = null; marcaSoltar.visible = false; fantasmaArraste.visible = false; faceAcesa.visible = false; faceAcesaChave = null;
   if (p) { const q = [p[0], p[1], p.normal ? p[2] : 0]; q.normal = p.normal; f(q); }
 });
 
