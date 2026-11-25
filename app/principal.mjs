@@ -1577,23 +1577,36 @@ renderer.domElement.addEventListener('pointerdown', e => {
     A: ancora.applyMatrix4(matrizDoNo(a.no)),
     plano: new THREE.Plane().setFromNormalAndCoplanarPoint(eixoV(2).applyQuaternion(q), H0),
     tam0: [0, 1, 2].map(i => (a.b.max.getComponent(i) - a.b.min.getComponent(i)) * Math.abs(t.escala[i])),
+    x0: e.clientX, y0: e.clientY, ativo: false,
   };
   renderer.domElement.setPointerCapture(e.pointerId);
 }, true);
 renderer.domElement.addEventListener('pointermove', e => {
   if (arrasteAlca?.no) {
-    const d = arrasteAlca, rr = raioDoMouse(e).ray, eixos = ALCAS[d.chave];
-    let W;
-    if (eixos.length === 1) { // ponto da linha do eixo mais perto do raio do mouse
-      const D = eixoV(eixos[0][0]).applyQuaternion(d.q);
-      const w0 = d.H0.clone().sub(rr.origin), b = D.dot(rr.direction), dd = D.dot(w0), ee = rr.direction.dot(w0), den = 1 - b * b;
-      if (den < 1e-6) return;
-      W = d.H0.clone().add(D.multiplyScalar((b * ee - dd) / den));
-    } else { W = rr.intersectPlane(d.plano, new V3()); if (!W) return; }
+    const d = arrasteAlca, eixos = ALCAS[d.chave];
+    // Só começa a redimensionar depois de o mouse andar uns pixels: um simples clique na alça (para ver ou
+    // digitar a cota) não muda mais a medida. E a medida muda pelo quanto o mouse andou desde o clique (antes
+    // ela pulava para onde o mouse caía na alça, e o clique já alterava o valor).
+    const pontoNoEixo = ev => {
+      const rr = raioDoMouse(ev).ray;
+      if (eixos.length === 1) { // ponto da linha do eixo mais perto do raio do mouse
+        const D = eixoV(eixos[0][0]).applyQuaternion(d.q);
+        const w0 = d.H0.clone().sub(rr.origin), b = D.dot(rr.direction), dd = D.dot(w0), ee = rr.direction.dot(w0), den = 1 - b * b;
+        if (den < 1e-6) return null;
+        return d.H0.clone().add(D.multiplyScalar((b * ee - dd) / den));
+      }
+      return rr.intersectPlane(d.plano, new V3());
+    };
+    if (!d.ativo) {
+      if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < 4) return;
+      d.W0 = pontoNoEixo({ clientX: d.x0, clientY: d.y0 }); if (!d.W0) return;
+      d.ativo = true;
+    }
+    const W = pontoNoEixo(e); if (!W) return;
     const passo = Number($('#passo-mov').value) || 0;
     const novos = {};
     for (const [i, s] of eixos) {
-      let v = s * W.clone().sub(d.A).dot(eixoV(i).applyQuaternion(d.q));
+      let v = d.tam0[i] + s * W.clone().sub(d.W0).dot(eixoV(i).applyQuaternion(d.q));
       if (passo) v = Math.round(v / passo) * passo;
       novos[i] = Math.max(passo || 0.1, v);
     }
@@ -2854,7 +2867,8 @@ async function inserirPeca(p, pos = null) {
   try { dados = lerPeca((await anvil.ler(p.caminho)).texto); } catch (e) { return mensagem(tt`Peça "${p.nome}": ${e.message}`, true); }
   const no = novaMalha(dados.nome || p.nome, dados.cor || CORES[E.corIdx++ % CORES.length]);
   no.malha = dados.malha;
-  no.transformacao.posicao = pos ?? posicaoNova();
+  no.transformacao.posicao = pos ? [pos[0], pos[1], pos[2]] : posicaoNova();
+  if (pos?.normal) no.transformacao.rotacao = rotacaoParaNormal(pos.normal);
   if (dados.receita?.length) no.receita = dados.receita;
   alterar(() => { E.doc.objetos.push(no); E.sel = [no.id]; });
   mensagem(tt`${no.nome} inserida.${no.receita ? tr(' "Voltar à receita" mostra como ela foi feita.') : ''}`);
@@ -3040,29 +3054,44 @@ function geometriaColorida(no, ent, malha) {
   const pintado = new Uint8Array(Math.floor(n / 3)); // triângulo já tem a cor da peça de onde veio
   if (ri && ro) for (let r = 0; r < ro.length; r++) {
     const cam = ent.caminhos?.get(ro[r]);
-    let f = cam ? no : null;
-    if (cam) for (const i of cam.split('/')) f = f?.filhos?.[+i];
-    if (!f || f.furo) continue;
+    let f = cam ? no : null, dentroDeFuro = false;
+    // uma peça sólida DENTRO de um grupo-furo (ex.: os cilindros do grupo de furos) também é furo: as paredes
+    // que ela abre não ficam com a cor dela (era o furo laranja no meio da peça cinza)
+    if (cam) for (const i of cam.split('/')) { f = f?.filhos?.[+i]; if (f?.furo) dentroDeFuro = true; }
+    if (!f || f.furo || dentroDeFuro) continue;
     c.set(f.cor);
     for (let v = ri[r]; v < ri[r + 1]; v++) { cor.set([c.r, c.g, c.b], v * 3); pintado[Math.floor(v / 3)] = 1; }
   }
-  // As paredes que um furo abre (o lado de dentro do furo) vêm do furo, que não tem cor: antes ficavam com
-  // a cor da primeira peça do grupo. Agora pegam a cor da peça que o furo cortou, espalhando a cor a partir
-  // da borda do furo (triângulos vizinhos que se tocam num vértice).
+  // Faces que não vêm de nenhuma peça colorida (paredes abertas por um furo, faces de um fillet/chanfro):
+  // cada pedaço contínuo delas recebe UMA cor só, a da peça com que ele faz mais borda. Antes a cor era
+  // espalhada triângulo a triângulo a partir das bordas, e um furo ou chanfro entre duas peças ficava com
+  // as cores misturadas em faixas.
   if (ri && ro && pintado.some(x => !x) && pintado.some(x => x)) {
-    const pos = ent.geo.attributes.position, chave = v => pos.getX(v).toFixed(4) + ',' + pos.getY(v).toFixed(4) + ',' + pos.getZ(v).toFixed(4);
-    const porVertice = new Map();
-    for (let v = 0; v < n; v++) { const k = chave(v); (porVertice.get(k) ?? porVertice.set(k, []).get(k)).push(Math.floor(v / 3)); }
-    const fila = [];
-    for (let t = 0; t < pintado.length; t++) if (pintado[t]) fila.push(t);
-    for (let ix = 0; ix < fila.length; ix++) {
-      const t = fila[ix];
-      for (let j = 0; j < 3; j++) for (const viz of porVertice.get(chave(t * 3 + j)) ?? []) {
-        if (pintado[viz]) continue;
-        pintado[viz] = 1;
-        for (let w = 0; w < 3; w++) for (let q = 0; q < 3; q++) cor[(viz * 3 + w) * 3 + q] = cor[t * 9 + q];
-        fila.push(viz);
-      }
+    const pos = ent.geo.attributes.position, nt = pintado.length;
+    const idV = new Map(), vid = new Int32Array(n);
+    for (let v = 0; v < n; v++) { const k = pos.getX(v).toFixed(4) + ',' + pos.getY(v).toFixed(4) + ',' + pos.getZ(v).toFixed(4); let i = idV.get(k); if (i === undefined) idV.set(k, i = idV.size); vid[v] = i; }
+    const arestas = new Map(); // aresta -> triângulos que a usam
+    for (let t = 0; t < nt; t++) for (let j = 0; j < 3; j++) {
+      const a1 = vid[t * 3 + j], b1 = vid[t * 3 + (j + 1) % 3], k = a1 < b1 ? a1 * 4294967296 + b1 : b1 * 4294967296 + a1;
+      (arestas.get(k) ?? arestas.set(k, []).get(k)).push(t);
+    }
+    const pai = Int32Array.from({ length: nt }, (_, i) => i), raiz = i => { while (pai[i] !== i) i = pai[i] = pai[pai[i]]; return i; };
+    const bordas = [];
+    for (const lista of arestas.values()) for (let x = 0; x < lista.length; x++) for (let y = x + 1; y < lista.length; y++) {
+      const t1 = lista[x], t2 = lista[y];
+      if (!pintado[t1] && !pintado[t2]) { const r1 = raiz(t1), r2 = raiz(t2); if (r1 !== r2) pai[r1] = r2; }
+      else if (!pintado[t1] !== !pintado[t2]) bordas.push(pintado[t1] ? [t2, t1] : [t1, t2]);
+    }
+    const votos = new Map(); // pedaço -> cor -> quantas arestas de borda
+    for (const [livre, pint] of bordas) {
+      const r = raiz(livre), c = cor[pint * 9] + ',' + cor[pint * 9 + 1] + ',' + cor[pint * 9 + 2];
+      const m = votos.get(r) ?? votos.set(r, new Map()).get(r); m.set(c, (m.get(c) ?? 0) + 1);
+    }
+    for (let t = 0; t < nt; t++) {
+      if (pintado[t]) continue;
+      const m = votos.get(raiz(t)); if (!m) continue;
+      const rgb = [...m.entries()].sort((p1, p2) => p2[1] - p1[1])[0][0].split(',').map(Number);
+      for (let w = 0; w < 3; w++) cor.set(rgb, (t * 3 + w) * 3);
     }
   }
   g.setAttribute('color', new THREE.BufferAttribute(cor, 3));
@@ -3652,6 +3681,12 @@ $('#resolucao').addEventListener('change', () => {
 motor.definirResolucao(Number($('#resolucao').value));
 
 // ---------- operações ----------
+// giro (graus, XYZ) que deixa o "para cima" da peça (+Z) na direção da normal da face onde ela foi solta
+function rotacaoParaNormal(n) {
+  const q = new THREE.Quaternion().setFromUnitVectors(new V3(0, 0, 1), new V3(...n).normalize());
+  const e = new THREE.Euler().setFromQuaternion(q, 'XYZ');
+  return [e.x, e.y, e.z].map(a => arred(a * GRAU, 4));
+}
 function adicionarForma(g, pos = null) {
   // geradores que precisam de um arquivo: o clique na biblioteca abre o arquivo certo
   if (g.id === 'svg') return importarSvg();
@@ -3660,7 +3695,8 @@ function adicionarForma(g, pos = null) {
   const cor = CORES[E.corIdx++ % CORES.length];
   const no = novaForma(g, parametrosPadrao(g), g.cor || cor);
   no.nome = nomeG(g);
-  no.transformacao.posicao = pos ?? posicaoNova();
+  no.transformacao.posicao = pos ? [pos[0], pos[1], pos[2]] : posicaoNova();
+  if (pos?.normal) no.transformacao.rotacao = rotacaoParaNormal(pos.normal);
   alterar(() => { E.doc.objetos.push(no); E.sel = [no.id]; });
   mensagem(tt`Nova peça: ${nomeG(g)}.`);
 }
@@ -3703,6 +3739,9 @@ function agrupar() {
     const filhos = E.doc.objetos.filter(o => E.sel.includes(o.id));
     for (const f of filhos) definirMatriz(f, Gi.clone().multiply(matrizDoNo(f)));
     const g = novoGrupo(filhos, { posicao: [arred(c.x), arred(c.y), arred(b.min.z)], rotacao: [0, 0, 0], escala: [1, 1, 1] });
+    // só furos: o grupo continua sendo um furo (um furo maior), com as peças dentro dele como sólidas — antes
+    // virava um grupo "vazio" (furos sem nada para furar) e deixava de furar
+    if (filhos.every(f => f.furo)) { g.furo = true; g.cor = filhos[0].cor; for (const f of filhos) f.furo = false; }
     E.doc.objetos = E.doc.objetos.filter(o => !E.sel.includes(o.id));
     E.doc.objetos.splice(idx, 0, g);
     E.sel = [g.id];
@@ -3710,18 +3749,26 @@ function agrupar() {
 }
 
 function desagrupar() {
-  const grupos = selecionados().filter(n => n.tipo === 'grupo');
-  if (!grupos.length) return mensagem(tr('Selecione um grupo para desagrupar.'));
+  // Um fillet/chanfro feito sobre um grupo (ex.: o pé de borracha, de 3 peças) também desagrupa: o
+  // acabamento sai e as peças voltam soltas (Ctrl+Z traz de volta). Antes o botão não fazia nada nele.
+  const alvos = selecionados().filter(n => n.tipo === 'grupo' || (n.tipo === 'acabamento' && n.filhos?.[0]));
+  if (!alvos.length) return mensagem(tr('Selecione um grupo para desagrupar.'));
+  const tirouAcabamento = alvos.some(n => n.tipo === 'acabamento');
   alterar(() => {
     const novos = [];
-    for (const g of grupos) {
-      const G = matrizDoNo(g), idx = E.doc.objetos.indexOf(g);
-      for (const f of g.filhos) definirMatriz(f, G.clone().multiply(matrizDoNo(f)));
-      E.doc.objetos.splice(idx, 1, ...g.filhos);
-      novos.push(...g.filhos.map(f => f.id));
+    for (const a of alvos) {
+      const idx = E.doc.objetos.indexOf(a);
+      let G = matrizDoNo(a), g = a;
+      if (a.tipo === 'acabamento') { g = a.filhos[0]; G = G.clone().multiply(matrizDoNo(g)); }
+      const pecas = g.tipo === 'grupo' ? g.filhos : [g];
+      if (g.tipo === 'grupo' && g.furo) for (const f of pecas) f.furo = true; // um grupo-furo desfeito: as peças viram furos
+      for (const f of pecas) definirMatriz(f, (g.tipo === 'grupo' ? G.clone().multiply(matrizDoNo(f)) : G.clone()));
+      E.doc.objetos.splice(idx, 1, ...pecas);
+      novos.push(...pecas.map(f => f.id));
     }
     E.sel = novos;
   });
+  if (tirouAcabamento) mensagem(tr('Desagrupado. O fillet/chanfro que estava sobre o grupo foi retirado (Ctrl+Z desfaz).'));
 }
 
 function duplicar() {
@@ -3772,11 +3819,54 @@ function moverTeclado(dx, dy, dz) {
     [dx, dy] = xDir ? [dx * sD, dy * sC] : [dy * sC, dx * sD];
   }
   const passo = Number($('#passo-mov').value) || 0.1;
-  alterar(() => sel.forEach(n => {
+  // Segurando a seta, a peça anda na tela sem recalcular nada a cada passo (antes cada passo refazia a cena
+  // inteira e gravava um passo de desfazer: ficava lento e o Ctrl+Z voltava de passinho em passinho). Ao
+  // soltar a tecla, tudo vira um único passo de desfazer e a cena é refeita uma vez.
+  if (!movTecla) movTecla = { antes: hist.instantaneo(E.doc) };
+  for (const n of sel) {
     const p = n.transformacao.posicao;
     n.transformacao.posicao = [arred(p[0] + dx * passo), arred(p[1] + dy * passo), arred(p[2] + dz * passo)];
-  }));
+    const m = malhas.get(n.id); if (m) aplicarTransformacao(m, n.transformacao);
+  }
+  try { atualizarMarcador(); } catch {}
+  desenhar();
+  clearTimeout(movTecla.t); movTecla.t = setTimeout(fimMovTecla, 1500); // segurança, se o soltar da tecla se perder
 }
+let movTecla = null;
+function fimMovTecla() {
+  if (!movTecla) return;
+  clearTimeout(movTecla.t);
+  const antes = movTecla.antes; movTecla = null;
+  hist.registrarTexto(antes); marcarSujo();
+  // só posições mudaram: as malhas já estão no lugar, então não precisa refazer a cena inteira (era uma
+  // travadinha de meio segundo ao soltar a tecla); com peças presas por junção, refaz como antes
+  if (E.doc.objetos.some(juncaoAtiva)) { posicionarJuncoes(); reconstruir3d(); }
+  else { atualizarAfetadas(); objetos3d.updateMatrixWorld(true); atualizarVisual(); }
+  montarPainel();
+}
+// Segurando uma seta, o movimento é feito pelo próprio Anvil3D, num ritmo contínuo que vai acelerando
+// (antes dependia da repetição de teclas do Windows: uma pausa no começo e depois passos aos trancos).
+const setasSeguras = new Map();
+let laçoSetas = 0, inicioSetas = 0;
+function teclaSeta(e, dx, dy, dz) {
+  if (e.repeat) return; // a repetição do sistema é ignorada: quem repete é o laço abaixo
+  setasSeguras.set(e.key, [dx, dy, dz]);
+  moverTeclado(dx, dy, dz);
+  if (!laçoSetas) { inicioSetas = performance.now(); laçoSetas = setTimeout(passoSetas, 220); } // um toque é só um passo
+}
+function passoSetas() {
+  if (!setasSeguras.size) { laçoSetas = 0; return; }
+  let dx = 0, dy = 0, dz = 0; for (const [a, b, c] of setasSeguras.values()) { dx += a; dy += b; dz += c; }
+  moverTeclado(dx, dy, dz);
+  // começa a ~11 passos por segundo e vai acelerando até ~40 por segundo
+  laçoSetas = setTimeout(passoSetas, Math.max(25, 90 - (performance.now() - inicioSetas - 220) * 0.05));
+}
+window.addEventListener('keyup', e => {
+  if (!/^Arrow/.test(e.key)) return;
+  setasSeguras.delete(e.key);
+  if (!setasSeguras.size) { clearTimeout(laçoSetas); laçoSetas = 0; if (movTecla) fimMovTecla(); }
+});
+window.addEventListener('blur', () => { setasSeguras.clear(); clearTimeout(laçoSetas); laçoSetas = 0; fimMovTecla(); });
 
 // ---------- arquivos ----------
 // Antes de trocar de projeto (Novo, Abrir…): a mesma pergunta do fechar a janela — Salvar, Não salvar
@@ -4189,7 +4279,7 @@ function atualizarBotoes() {
   const n = E.sel.length, total = E.doc.objetos.length, unico = n === 1 ? noPorId(E.sel[0]) : null;
   const regra = {
     alinhar: n >= 2, juntarFaces: n === 1 && total >= 2, faceNaMesa: n >= 1, espelharModo: n >= 1,
-    agrupar: n >= 2, desagrupar: unico?.tipo === 'grupo', alternarFuro: n >= 1, alternarGizmo: n >= 1,
+    agrupar: n >= 2, desagrupar: unico?.tipo === 'grupo' || (unico?.tipo === 'acabamento' && unico.filhos?.[0]?.tipo === 'grupo'), alternarFuro: n >= 1, alternarGizmo: n >= 1,
     duplicar: n >= 1, excluir: n >= 1, copiar: n >= 1, recortar: n >= 1, projetar: n === 2, aplicarFace: n === 1, textura: n === 1, consolidar: total >= 1,
   };
   for (const b of document.querySelectorAll('[data-cmd]')) { const r = regra[b.dataset.cmd]; if (r !== undefined) b.disabled = !r; }
@@ -4300,7 +4390,7 @@ function montarPainel() {
   painel.append(titulo(tr('Consolidar e biblioteca'), 'consolidar'), el('div', { class: 'botoes' },
     el('button', { onclick: consolidar }, sel.length > 1 ? tr('Consolidar seleção') : tr('Consolidar')),
     unico && !E.erros.has(unico.id) ? el('button', { onclick: () => salvarNaBiblioteca(unico) }, tr('Salvar na biblioteca')) : null));
-  if (unico?.tipo === 'grupo') painel.append(el('div', { class: 'botoes' }, el('button', { onclick: desagrupar }, tr('Desagrupar'))));
+  if (unico?.tipo === 'grupo' || (unico?.tipo === 'acabamento' && unico.filhos?.[0]?.tipo === 'grupo')) painel.append(el('div', { class: 'botoes' }, el('button', { onclick: desagrupar }, tr('Desagrupar'))));
 
   const presa = juncaoAtiva(unico);
   if (unico?.juncao) {
@@ -4637,10 +4727,20 @@ function montarFantasma(f) {
     fantasmaArraste.geometry = g; fantasmaArraste.material.color.set(cor || '#3a86c8'); fantasmaArraste.userData.ok = true;
   } catch {}
 }
-function pontoDeSoltar(e) {
+function pontoDeSoltar(e, naFace = false) {
   const r = renderer.domElement.getBoundingClientRect();
   ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
-  // sempre na mesa, na altura zero
+  // Arrastando uma forma nova por cima de outra peça, ela já vai "de face" na superfície que está sob o mouse
+  // (como o Juntar faces, mas sem criar vínculo): base encostada na face, de pé na direção da face.
+  if (naFace) {
+    const hit = ray.intersectObjects([...malhas.values()].filter(m => m.visible), false)[0];
+    if (hit?.face) {
+      const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
+      const pf = [arred(hit.point.x), arred(hit.point.y), arred(hit.point.z)]; pf.normal = [n.x, n.y, n.z];
+      return pf;
+    }
+  }
+  // sem peça sob o mouse: na mesa, na altura zero
   const p = ray.ray.intersectPlane(new THREE.Plane(new V3(0, 0, 1), 0), new V3());
   if (!p) return null;
   const passo = Number($('#passo-mov').value) || 0;
@@ -4650,11 +4750,12 @@ function pontoDeSoltar(e) {
 vista.addEventListener('dragover', e => {
   if (!arrastandoForma) return;
   e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
-  const p = pontoDeSoltar(e);
+  const p = pontoDeSoltar(e, true);
   const comFantasma = !!p && fantasmaArraste.userData.ok;
   fantasmaArraste.visible = comFantasma; marcaSoltar.visible = !!p && !comFantasma;
   if (p) {
-    fantasmaArraste.position.set(p[0], p[1], 0);
+    fantasmaArraste.position.set(p[0], p[1], p[2]);
+    fantasmaArraste.quaternion.setFromUnitVectors(new V3(0, 0, 1), new V3(...(p.normal ?? [0, 0, 1])));
     marcaSoltar.position.set(p[0], p[1], 0.05); marcaSoltar.scale.setScalar(Math.max(0.4, camera.position.distanceTo(marcaSoltar.position) / 180));
   }
   desenhar();
@@ -4681,9 +4782,9 @@ window.addEventListener('drop', async e => {
 vista.addEventListener('drop', e => {
   if (!arrastandoForma) return;
   e.preventDefault();
-  const p = pontoDeSoltar(e), f = arrastandoForma;
+  const p = pontoDeSoltar(e, true), f = arrastandoForma;
   arrastandoForma = null; marcaSoltar.visible = false; fantasmaArraste.visible = false;
-  if (p) f([p[0], p[1], 0]);
+  if (p) { const q = [p[0], p[1], p.normal ? p[2] : 0]; q.normal = p.normal; f(q); }
 });
 
 // Biblioteca em categorias (ordem fixa, como no Tinkercad), que abrem e fecham, com busca por nome
@@ -4807,9 +4908,9 @@ document.addEventListener('keydown', e => {
     c && k === 'i' ? importarStl : !c && k === 'r' ? comandos.alternarGizmo : !c && e.shiftKey && k === 'j' ? comandos.soltarJuncao : !c && k === 'b' ? comandos.faceNaMesa : !c && k === 'l' ? comandos.alinhar : !c && k === 'm' ? comandos.espelharModo : c && k === 'k' ? consolidar : !c && k === 'j' ? () => { if (!e.repeat) entrarJF(true); } : !c && k === 't' ? comandos.verTriangulos :
     k === 'enter' && AL ? sairAlinhar : k === 'enter' && MA ? aplicarModoAresta : k === 'delete' && ME ? apagarSelecaoME : k === 'delete' && !MA ? excluir : !c && k === 'h' ? alternarFuro : !c && k === 'f' ? () => enquadrar() : k === 'home' ? () => enquadrar('iso') :
     k === 'escape' ? () => { if (menuAberto) fecharMenu(); else if (E.escolhendoPonto) cancelarEscolha(); else if (FM) { sairFM(); mensagem(tr('Face na mesa cancelado.')); } else if (ALN) sairAlinharObj(); else if (ESP) sairEspelhar(); else if (AF) { sairAplicarFace(); mensagem(tr('Aplicar na face cancelado.')); } else if (TX) { sairTextura(); mensagem(tr('Textura cancelada.')); } else if (AL) { sairAlinhar(); mensagem(tr('Junção mantida sem alinhar arestas. Arraste a peça para deslizar sobre a outra.')); } else if (JF) { sairJF(); mensagem(tr('Juntar faces cancelado.')); } else if (MA) sairModoAresta(); else if (ME) sairME(); else { E.sel = []; atualizarVisual(); montarPainel(); } } :
-    k === 'arrowleft' ? () => moverTeclado(-1, 0, 0) : k === 'arrowright' ? () => moverTeclado(1, 0, 0) :
-    c && k === 'arrowup' ? () => moverTeclado(0, 0, 1) : c && k === 'arrowdown' ? () => moverTeclado(0, 0, -1) :
-    k === 'arrowup' ? () => moverTeclado(0, 1, 0) : k === 'arrowdown' ? () => moverTeclado(0, -1, 0) : null);
+    k === 'arrowleft' ? () => teclaSeta(e, -1, 0, 0) : k === 'arrowright' ? () => teclaSeta(e, 1, 0, 0) :
+    c && k === 'arrowup' ? () => teclaSeta(e, 0, 0, 1) : c && k === 'arrowdown' ? () => teclaSeta(e, 0, 0, -1) :
+    k === 'arrowup' ? () => teclaSeta(e, 0, 1, 0) : k === 'arrowdown' ? () => teclaSeta(e, 0, -1, 0) : null);
   if (atalho) {
     e.preventDefault();
     const neutro = k === 'escape' || k === 'f' || k === 'home' || (!c && k === 't') || (k === 'enter' && (AL || MA)) || (k === 'delete' && ME) || (c && (k === 's' || k === 'e'));
@@ -4831,7 +4932,7 @@ const reprojetar = (i, alvo, modo = 'curva', inverter = false) => {
   void cB;
   confirmarProjecao(o, calcularProjecao(c, B, dir, 180, { modo, afundar: 0.3 }), c);
 };
-window.__anvil = { reprojetar, calc: (A, B, d, m) => calcularProjecao(A, B, d, 180, { modo: m, afundar: 0.3 }), abrirImagem: f => abrirImportarImagem(f), importarStls: (a, p) => importarStls(a, p), importarMalhas: (a, p) => importarMalhas(a, p), get previaAF() { return grupoPreviaAF.children.length; }, orbita, abrirTexto: (texto, caminho) => abrirArquivo({ texto, caminho }), motor, moverPeca: v => { moverPeca = v; atualizarVisual(); }, alcasLaterais: v => { alcasLaterais = v; desenhar(); }, criarDeSvg: (t, n) => criarDeSvg(t, n), mostrarCotas: (chave = 'todas') => { alcaHover = null; cotasAlca = chave; cotasAte = performance.now() + 60000; desenhar(); }, get espelho() { return ESP; }, arrasteAlcaInfo: () => arrasteAlca, serializarComMiniatura: () => serializarComMiniatura(), selecionar: ids => { E.sel = ids; atualizarVisual(); montarPainel(); }, gizmo, grupoAfetado, get alinharObj() { return ALN; }, get alinhar() { return AL; }, get modoMalha() { return ME; }, THREE, camera, cena, grupoArestas, malhas, estado: E, get modoAresta() { return MA; } };
+window.__anvil = { hist, comandos, forcarRebuild: () => reconstruir3d(), montarPainel: () => montarPainel(), reprojetar, calc: (A, B, d, m) => calcularProjecao(A, B, d, 180, { modo: m, afundar: 0.3 }), abrirImagem: f => abrirImportarImagem(f), importarStls: (a, p) => importarStls(a, p), importarMalhas: (a, p) => importarMalhas(a, p), get previaAF() { return grupoPreviaAF.children.length; }, orbita, abrirTexto: (texto, caminho) => abrirArquivo({ texto, caminho }), motor, moverPeca: v => { moverPeca = v; atualizarVisual(); }, alcasLaterais: v => { alcasLaterais = v; desenhar(); }, criarDeSvg: (t, n) => criarDeSvg(t, n), mostrarCotas: (chave = 'todas') => { alcaHover = null; cotasAlca = chave; cotasAte = performance.now() + 60000; desenhar(); }, get espelho() { return ESP; }, arrasteAlcaInfo: () => arrasteAlca, serializarComMiniatura: () => serializarComMiniatura(), selecionar: ids => { E.sel = ids; atualizarVisual(); montarPainel(); }, gizmo, grupoAfetado, get alinharObj() { return ALN; }, get alinhar() { return AL; }, get modoMalha() { return ME; }, THREE, camera, cena, grupoArestas, malhas, estado: E, get modoAresta() { return MA; } };
 
 // ---------- idioma ----------
 const originais = new WeakMap();

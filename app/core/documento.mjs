@@ -33,6 +33,7 @@ export function novoGrupo(filhos, transformacao) {
   const primeiroSolido = filhos.find(f => !f.furo);
   return {
     id: novoId(), nome: tr('Grupo'), tipo: 'grupo', furo: false,
+    multicor: false, // grupos novos saem de uma cor só; a caixa "Multicolorido" do painel liga as cores das peças
     cor: primeiroSolido ? primeiroSolido.cor : '#9aa3a8',
     transformacao: transformacao || transformacaoPadrao(), filhos,
   };

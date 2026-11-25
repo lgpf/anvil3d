@@ -8,6 +8,15 @@ import { tr, tt } from './i18n.mjs';
 import { lerMalha, paraManifold, bordas } from './malha.mjs';
 import { extrairArestas, casarArestas, aplicarAcabamento } from './arestas.mjs';
 
+// resumo de 2×32 bits (cyrb53 com as duas metades) + tamanho: chave curta e praticamente sem colisões
+function resumo(t) {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < t.length; i++) { const c = t.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36) + t.length.toString(36);
+}
+
 export class MotorGeometria {
   constructor(wasm, registro) {
     this.wasm = wasm; this.registro = registro;
@@ -33,10 +42,14 @@ export class MotorGeometria {
   definirResolucao(r) { if (r !== this.resolucao) { this.resolucao = r; this.limparCache(); } }
   iniciarPassada() { if (this.cache.size > 400) this.limparCache(); }
 
+  // Chave do cache de geometria. Cada nível guarda só um resumo (hash) da chave dos filhos: antes a chave do
+  // filho entrava inteira, como texto dentro do texto, e a cada nível de grupo as aspas eram escapadas de
+  // novo — em projetos com muitos grupos dentro de grupos a chave crescia sem parar e só montá-la levava
+  // quase meio segundo a cada mudança (o "Processando…" ao desfazer).
   chave(no) {
-    if (no.tipo === 'grupo') return 'g' + JSON.stringify(no.filhos.map(f => [this.chave(f), f.furo, f.transformacao]));
+    if (no.tipo === 'grupo') return 'g' + resumo(JSON.stringify(no.filhos.map(f => [this.chave(f), f.furo, f.transformacao])));
     if (no.tipo === 'malha') return 'm' + no.malha.rev;
-    if (no.tipo === 'acabamento') return 'a' + JSON.stringify([this.chave(no.filhos[0]), no.filhos[0].transformacao, no.modo, no.medida, no.arestas]);
+    if (no.tipo === 'acabamento') return 'a' + resumo(JSON.stringify([this.chave(no.filhos[0]), no.filhos[0].transformacao, no.modo, no.medida, no.arestas]));
     return 'f' + JSON.stringify([no.gerador, no.parametros]);
   }
 
